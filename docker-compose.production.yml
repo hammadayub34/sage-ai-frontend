@@ -1,0 +1,86 @@
+version: '3.8'
+
+# Production Docker Compose with Network Separation
+# This simulates OT and IT network separation using Docker networks
+
+services:
+  # MQTT Broker (IT Network - Cloud/Server)
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt-broker-production
+    ports:
+      - "8883:8883"      # MQTT TLS (Production)
+      # - "1883:1883"    # Standard MQTT (disabled in production)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - it-network
+    restart: unless-stopped
+    command: mosquitto -c /mosquitto/config/mosquitto.production.conf
+
+  # InfluxDB (IT Network)
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb-production
+    ports:
+      - "8086:8086"      # InfluxDB API
+    volumes:
+      - ./influxdb/data:/var/lib/influxdb2
+      - ./influxdb/config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=admin123
+      - DOCKER_INFLUXDB_INIT_ORG=myorg
+      - DOCKER_INFLUXDB_INIT_BUCKET=plc_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    networks:
+      - it-network
+    restart: unless-stopped
+
+  # Grafana (IT Network)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-production
+    ports:
+      - "3004:3000"      # Grafana web UI (mapped to 3004 to avoid conflict)
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    networks:
+      - it-network
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+
+  # Mock PLC (OT Network - Simulated)
+  # In production, this would be a real PLC on the OT network
+  mock_plc:
+    image: alpine:latest
+    container_name: mock-plc-ot
+    networks:
+      - ot-network
+    command: tail -f /dev/null  # Keep container running
+    # In production, this would be replaced by a real PLC device
+
+networks:
+  # IT Network - Where cloud services run
+  it-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+  
+  # OT Network - Where PLCs and edge gateways run
+  ot-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+

@@ -1,0 +1,15 @@
+# Access Control List for MQTT Broker
+# Format: topic [read|write|readwrite] <username>
+
+# Edge Gateway (OT Network) - Can publish to PLC topics for any machine
+user edge_gateway
+topic write plc/+/bottlefiller/#
+
+# InfluxDB Writer (IT Network) - Can subscribe to PLC topics for any machine
+user influxdb_writer
+topic read plc/+/bottlefiller/#
+
+# Admin user - Full access
+user admin
+topic readwrite #
+

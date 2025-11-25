@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+out/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data directories (exclude from image, use volumes)
+influxdb/data/
+grafana/data/
+mosquitto/data/
+mosquitto/log/
+
+# Test files
+test_*.py
+*_test.py
+__tests__/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
