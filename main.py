@@ -65,6 +65,11 @@ print("=" * 60)
 print("🚀 MQTT OT Network - Starting on Replit")
 print("=" * 60)
 
+# Detect Python command
+import shutil
+PYTHON_CMD = shutil.which("python3") or shutil.which("python") or "python3"
+print(f"🐍 Using Python: {PYTHON_CMD}")
+
 # Auto-install Python dependencies
 print("\n📦 Checking Python dependencies...")
 try:
@@ -90,7 +95,7 @@ else:
 print("\n📝 Starting InfluxDB Writer...")
 start_service(
     "InfluxDB Writer",
-    "python3 influxdb_writer/influxdb_writer_production.py"
+    f"{PYTHON_CMD} influxdb_writer/influxdb_writer_production.py"
 )
 
 # Wait a moment for writer to initialize
@@ -100,7 +105,7 @@ time.sleep(2)
 print("\n🤖 Starting Mock PLC Agent...")
 start_service(
     "Mock PLC Agent",
-    "python3 mock_plc_agent/mock_plc_agent.py"
+    f"{PYTHON_CMD} mock_plc_agent/mock_plc_agent.py"
 )
 
 # Start Frontend
@@ -155,9 +160,9 @@ try:
                 # Try to restart
                 print(f"🔄 Attempting to restart {name}...")
                 if name == "InfluxDB Writer":
-                    start_service(name, "python3 influxdb_writer/influxdb_writer_production.py")
+                    start_service(name, f"{PYTHON_CMD} influxdb_writer/influxdb_writer_production.py")
                 elif name == "Mock PLC Agent":
-                    start_service(name, "python3 mock_plc_agent/mock_plc_agent.py")
+                    start_service(name, f"{PYTHON_CMD} mock_plc_agent/mock_plc_agent.py")
                 elif name == "Frontend":
                     if os.path.exists("frontend/node_modules"):
                         start_service(name, "npm run dev", cwd="frontend")

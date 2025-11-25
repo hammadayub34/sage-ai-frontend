@@ -1,10 +1,10 @@
 language = "python3"
 
 [deploy]
-run = ["python3", "main.py"]
+run = ["python", "main.py"]
 
 [run]
-command = "python3 main.py"
+command = "python main.py"
 
 [packager]
 language = "python3"
