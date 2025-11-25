@@ -8,6 +8,13 @@ import time
 import signal
 import sys
 
+# Load .env file if it exists (fallback for Replit secrets)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, skip
+
 processes = []
 
 def start_service(name, command, cwd=None):
