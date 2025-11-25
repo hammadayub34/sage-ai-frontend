@@ -256,8 +256,9 @@ if MQTT_TLS_ENABLED:
         print(f"   ✅ TLS configured with CA cert: {CA_CERT_PATH}")
     else:
         print(f"   ⚠️  CA cert not found: {CA_CERT_PATH}")
-        print(f"   ⚠️  Running without TLS verification (not recommended for production)")
+        print(f"   ⚠️  Running without TLS verification (for cloud MQTT)")
         mqtt_client.tls_set(cert_reqs=ssl.CERT_NONE)
+        mqtt_client.tls_insecure_set(True)  # Disable certificate verification for cloud brokers
 
 print(f"🔗 Connecting to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}...")
 print(f"   Network: IT Network")
