@@ -29,8 +29,29 @@ if not all([url, token, org, bucket]):
     exit(1)
 
 try:
-    print("🔗 Connecting to InfluxDB...")
-    # Use longer timeout for connection
+    print("🔗 Testing basic connectivity first...")
+    import urllib3
+    import socket
+    
+    # Test basic connectivity
+    try:
+        host = url.replace('https://', '').replace('http://', '').split('/')[0]
+        print(f"   Testing connection to {host}...")
+        sock = socket.create_connection((host, 443), timeout=10)
+        sock.close()
+        print("   ✅ Network connectivity OK")
+    except Exception as e:
+        print(f"   ⚠️  Network test failed: {e}")
+        print("   💡 This might be a Replit network restriction")
+    
+    print("\n🔗 Connecting to InfluxDB...")
+    # Use longer timeout for connection - configure urllib3 pool manager
+    import urllib3
+    http = urllib3.PoolManager(
+        timeout=urllib3.Timeout(connect=30.0, read=30.0),
+        retries=urllib3.Retry(total=3, backoff_factor=0.3)
+    )
+    
     client = InfluxDBClient(
         url=url, 
         token=token, 
