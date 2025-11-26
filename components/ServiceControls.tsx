@@ -194,39 +194,72 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         // Refresh status multiple times to catch the service starting
         // Try immediately, then after 1s, 2s, and 3s
         const refreshStatus = (attempt: number = 0) => {
-          fetch('/api/services/status', {
-            cache: 'no-store', // Prevent caching
+          // Use timestamp to prevent caching
+          fetch(`/api/services/status?t=${Date.now()}`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache',
+            },
           })
             .then(res => res.json())
             .then(data => {
               console.log(`Status refreshed (attempt ${attempt}):`, data);
-              // Force a new object reference to trigger re-render
-              setStatus({ ...data });
               
               // Check if service is now running
               const isRunning = service === 'influxdb_writer' 
                 ? data.influxdbWriter?.running 
                 : data.machines?.[machineId]?.running;
               
+              console.log(`Service ${service} running status: ${isRunning} (attempt ${attempt})`);
+              
+              // Always update status to trigger re-render, even if not running yet
+              setStatus(prev => {
+                // Create a completely new object to force React to re-render
+                const newStatus = {
+                  influxdbWriter: { running: data.influxdbWriter?.running ?? false },
+                  machines: {
+                    'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
+                    'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
+                    'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
+                  },
+                };
+                console.log('Setting new status:', newStatus);
+                return newStatus;
+              });
+              
               if (isRunning) {
                 // Service is running, clear loading state immediately
-                setLoading(prev => ({ ...prev, [service]: false }));
-                // Force a fresh status update to trigger re-render
+                console.log(`✅ Service ${service} is now running! Clearing loading state.`);
+                setLoading(prev => {
+                  const newLoading = { ...prev, [service]: false };
+                  console.log('New loading state:', newLoading);
+                  return newLoading;
+                });
+                // Force one more status update to ensure UI is in sync
                 setTimeout(() => {
-                  fetch('/api/services/status', { cache: 'no-store' })
+                  fetch(`/api/services/status?t=${Date.now()}`, { cache: 'no-store' })
                     .then(res => res.json())
-                    .then(data => {
-                      console.log('Final status update after start:', data);
-                      setStatus({ ...data }); // Force new object reference
+                    .then(finalData => {
+                      console.log('Final status update after start:', finalData);
+                      setStatus({
+                        influxdbWriter: { running: finalData.influxdbWriter?.running ?? false },
+                        machines: {
+                          'machine-01': { running: finalData.machines?.['machine-01']?.running ?? false },
+                          'machine-02': { running: finalData.machines?.['machine-02']?.running ?? false },
+                          'machine-03': { running: finalData.machines?.['machine-03']?.running ?? false },
+                        },
+                      });
                     });
-                }, 200);
+                }, 300);
                 // Don't continue polling - we're done
                 return;
-              } else if (attempt < 5) {
-                // Service not running yet, try again
+              } else if (attempt < 8) {
+                // Service not running yet, try again (increased to 8 attempts)
+                console.log(`Service ${service} not running yet, retrying in 1s (attempt ${attempt + 1}/8)`);
                 setTimeout(() => refreshStatus(attempt + 1), 1000);
               } else {
                 // Max attempts reached, clear loading anyway
+                console.log(`Max attempts reached for ${service}, clearing loading state`);
                 setLoading(prev => ({ ...prev, [service]: false }));
               }
             })
@@ -239,7 +272,8 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
             });
         };
         
-        // Start refreshing status
+        // Start refreshing status immediately
+        console.log(`Starting status refresh for ${service}...`);
         refreshStatus(0);
       } else {
         const errorMsg = data.message || data.error || 'Failed to start service';
