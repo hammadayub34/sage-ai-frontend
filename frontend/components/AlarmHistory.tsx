@@ -26,8 +26,14 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h' }: A
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Alarm History (Last 24h)</h3>
-        <div className="text-gray-400">Loading...</div>
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <h3 className="text-white text-lg font-semibold">Alarm History (Last 24h)</h3>
+          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+        </div>
+        {isExpanded && <div className="text-gray-400">Loading...</div>}
       </div>
     );
   }
@@ -35,8 +41,14 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h' }: A
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Alarm History (Last 24h)</h3>
-        <div className="text-red-400">Error loading alarm history</div>
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <h3 className="text-white text-lg font-semibold">Alarm History (Last 24h)</h3>
+          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+        </div>
+        {isExpanded && <div className="text-red-400">Error loading alarm history</div>}
       </div>
     );
   }

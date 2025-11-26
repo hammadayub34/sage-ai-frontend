@@ -10,6 +10,7 @@ interface TagsTableProps {
 
 export function TagsTable({ machineId = 'machine-01' }: TagsTableProps) {
   const { data, isLoading, error } = usePLCData(machineId);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     status: true,
     counter: true,
@@ -28,8 +29,14 @@ export function TagsTable({ machineId = 'machine-01' }: TagsTableProps) {
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">All Tag Values</h3>
-        <div className="text-gray-400">Loading...</div>
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+        </div>
+        {isExpanded && <div className="text-gray-400">Loading...</div>}
       </div>
     );
   }
@@ -37,8 +44,14 @@ export function TagsTable({ machineId = 'machine-01' }: TagsTableProps) {
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">All Tag Values</h3>
-        <div className="text-red-400">Error loading data</div>
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+        </div>
+        {isExpanded && <div className="text-red-400">Error loading data</div>}
       </div>
     );
   }
@@ -49,18 +62,26 @@ export function TagsTable({ machineId = 'machine-01' }: TagsTableProps) {
   if (!hasData && !isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">All Tag Values</h3>
-        <div className="text-yellow-400 p-4 text-center">
-          ⚠️ No data available for {machineId}
-          <br />
-          <span className="text-gray-500 text-sm mt-2 block">
-            To see data for this machine, run:
-            <br />
-            <code className="bg-midnight-200 px-2 py-1 rounded mt-1 inline-block border border-dark-border">
-              ./start_mock_plc.sh {machineId}
-            </code>
-          </span>
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
         </div>
+        {isExpanded && (
+          <div className="text-yellow-400 p-4 text-center">
+            ⚠️ No data available for {machineId}
+            <br />
+            <span className="text-gray-500 text-sm mt-2 block">
+              To see data for this machine, run:
+              <br />
+              <code className="bg-midnight-200 px-2 py-1 rounded mt-1 inline-block border border-dark-border">
+                ./start_mock_plc.sh {machineId}
+              </code>
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -147,14 +168,23 @@ export function TagsTable({ machineId = 'machine-01' }: TagsTableProps) {
 
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
-        <div className="text-gray-400 text-sm">
-          Last updated: {formatESTTime(data._time)}
+      <div 
+        className="flex items-center justify-between mb-4 cursor-pointer hover:opacity-80 transition-opacity"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-2">
+          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
         </div>
+        {isExpanded && (
+          <div className="text-gray-400 text-sm">
+            Last updated: {formatESTTime(data._time)}
+          </div>
+        )}
       </div>
 
-      <div className="overflow-x-auto">
+      {isExpanded && (
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-dark-border">
@@ -290,7 +320,8 @@ export function TagsTable({ machineId = 'machine-01' }: TagsTableProps) {
             ))}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
