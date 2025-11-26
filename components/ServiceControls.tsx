@@ -66,9 +66,10 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
     }
   };
 
-  // Fetch status once on component mount
+  // Fetch status with polling
   useEffect(() => {
     let isMounted = true;
+    let pollInterval: NodeJS.Timeout | null = null;
 
     const fetchStatus = async () => {
       try {
@@ -85,11 +86,21 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
       }
     };
 
-    // Initial fetch on mount only
+    // Initial fetch on mount
     fetchStatus();
+
+    // Poll every 2 seconds to keep status updated
+    pollInterval = setInterval(() => {
+      if (isMounted) {
+        fetchStatus();
+      }
+    }, 2000);
 
     return () => {
       isMounted = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
     };
   }, []); // Empty dependency array - only run on mount
 
@@ -137,13 +148,22 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
           }));
         }
         
-        // Refresh status after service has time to start (3 seconds for start)
-        setTimeout(() => {
+        // Refresh status multiple times to catch the service starting
+        // Try immediately, then after 1s, 2s, and 3s
+        const refreshStatus = () => {
           fetch('/api/services/status')
             .then(res => res.json())
             .then(data => setStatus(data))
             .catch(err => console.error('Error refreshing status:', err));
-        }, service === 'influxdb_writer' ? 3000 : 3000);
+        };
+        
+        // Immediate refresh
+        refreshStatus();
+        
+        // Then refresh at intervals
+        setTimeout(refreshStatus, 1000);
+        setTimeout(refreshStatus, 2000);
+        setTimeout(refreshStatus, 3000);
       } else {
         const errorMsg = data.message || data.error || 'Failed to start service';
         const logPreview = data.logPreview ? `\n\nLog preview:\n${data.logPreview}` : '';
@@ -192,13 +212,21 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
 
       if (response.ok && data.success) {
         setError(null);
-        // Refresh status after service has time to stop (2 seconds for stop)
-        setTimeout(() => {
+        // Refresh status multiple times to catch the service stopping
+        const refreshStatus = () => {
           fetch('/api/services/status')
             .then(res => res.json())
             .then(data => setStatus(data))
             .catch(err => console.error('Error refreshing status:', err));
-        }, 2000);
+        };
+        
+        // Immediate refresh
+        refreshStatus();
+        
+        // Then refresh at intervals
+        setTimeout(refreshStatus, 500);
+        setTimeout(refreshStatus, 1000);
+        setTimeout(refreshStatus, 2000);
       } else {
         const errorMsg = data.message || data.error || 'Failed to stop service';
         setError(errorMsg);
