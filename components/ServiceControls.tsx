@@ -24,8 +24,13 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
   const logEndRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Calculate running status (must be before useEffect that uses them)
-  const influxdbRunning = status?.influxdbWriter.running ?? false;
-  const machineRunning = status?.machines[machineId as keyof typeof status.machines]?.running ?? false;
+  const influxdbRunning = status?.influxdbWriter?.running ?? false;
+  const machineRunning = status?.machines?.[machineId as keyof typeof status.machines]?.running ?? false;
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('Service status updated:', { status, influxdbRunning, machineRunning });
+  }, [status, influxdbRunning, machineRunning]);
 
   // Reset logs visibility when service stops
   useEffect(() => {
@@ -73,7 +78,9 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
 
     const fetchStatus = async () => {
       try {
-        const response = await fetch('/api/services/status');
+        const response = await fetch('/api/services/status', {
+          cache: 'no-store', // Prevent caching
+        });
         if (response.ok && isMounted) {
           const data = await response.json();
           setStatus(data);
@@ -151,9 +158,14 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         // Refresh status multiple times to catch the service starting
         // Try immediately, then after 1s, 2s, and 3s
         const refreshStatus = () => {
-          fetch('/api/services/status')
+          fetch('/api/services/status', {
+            cache: 'no-store', // Prevent caching
+          })
             .then(res => res.json())
-            .then(data => setStatus(data))
+            .then(data => {
+              console.log('Status refreshed:', data);
+              setStatus(data);
+            })
             .catch(err => console.error('Error refreshing status:', err));
         };
         
@@ -164,6 +176,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         setTimeout(refreshStatus, 1000);
         setTimeout(refreshStatus, 2000);
         setTimeout(refreshStatus, 3000);
+        setTimeout(refreshStatus, 5000); // Extra check at 5s
       } else {
         const errorMsg = data.message || data.error || 'Failed to start service';
         const logPreview = data.logPreview ? `\n\nLog preview:\n${data.logPreview}` : '';
