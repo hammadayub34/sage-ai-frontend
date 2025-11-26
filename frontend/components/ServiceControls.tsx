@@ -127,6 +127,10 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
   };
 
   const startService = async (service: 'influxdb_writer' | 'mock_plc') => {
+    // Reset status to ensure we don't show wrong button state
+    if (service === 'influxdb_writer') {
+      setStatus(prev => prev ? { ...prev, influxdbWriter: { running: false } } : null);
+    }
     setLoading({ ...loading, [service]: true });
     setError(null);
     
@@ -180,14 +184,19 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                 : data.machines?.[machineId]?.running;
               
               if (isRunning) {
-                // Service is running, clear loading state and force re-render
+                // Service is running, clear loading state immediately
                 setLoading(prev => ({ ...prev, [service]: false }));
-                // Force another status check to ensure UI updates
+                // Force a fresh status update to trigger re-render
                 setTimeout(() => {
                   fetch('/api/services/status', { cache: 'no-store' })
                     .then(res => res.json())
-                    .then(data => setStatus({ ...data }));
-                }, 100);
+                    .then(data => {
+                      console.log('Final status update after start:', data);
+                      setStatus({ ...data }); // Force new object reference
+                    });
+                }, 200);
+                // Don't continue polling - we're done
+                return;
               } else if (attempt < 5) {
                 // Service not running yet, try again
                 setTimeout(() => refreshStatus(attempt + 1), 1000);
@@ -362,7 +371,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                     disabled={loading.influxdb_writer}
                     className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-red-500/50"
                   >
-                    {loading.influxdb_writer ? '⏳ Stopping Writer...' : '⏹ Stop Writer'}
+                    ⏹ Stop Writer
                   </button>
                 </>
               ) : null}
