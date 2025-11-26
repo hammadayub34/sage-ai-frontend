@@ -16,7 +16,15 @@ interface ServiceControlsProps {
 }
 
 export function ServiceControls({ machineId }: ServiceControlsProps) {
-  const [status, setStatus] = useState<ServiceStatus | null>(null);
+  // Initialize with all services stopped to prevent flash of wrong state
+  const [status, setStatus] = useState<ServiceStatus | null>({
+    influxdbWriter: { running: false },
+    machines: {
+      'machine-01': { running: false },
+      'machine-02': { running: false },
+      'machine-03': { running: false },
+    },
+  });
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, string>>({});
@@ -85,12 +93,25 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
 
     const fetchStatus = async () => {
       try {
-        const response = await fetch('/api/services/status', {
-          cache: 'no-store', // Prevent caching
+        // Add timestamp to prevent caching
+        const response = await fetch(`/api/services/status?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
         });
         if (response.ok && isMounted) {
           const data = await response.json();
-          setStatus(data);
+          console.log('Status fetched:', data);
+          // Only update if data actually changed to prevent unnecessary re-renders
+          setStatus(prev => {
+            const prevStr = JSON.stringify(prev);
+            const newStr = JSON.stringify(data);
+            if (prevStr !== newStr) {
+              return data;
+            }
+            return prev;
+          });
           setError(null);
         }
       } catch (err) {
@@ -100,8 +121,12 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
       }
     };
 
-    // Initial fetch on mount
-    fetchStatus();
+    // Initial fetch on mount with a small delay to ensure fresh data
+    setTimeout(() => {
+      if (isMounted) {
+        fetchStatus();
+      }
+    }, 100);
 
     // Poll every 2 seconds to keep status updated
     pollInterval = setInterval(() => {

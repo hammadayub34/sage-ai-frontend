@@ -33,6 +33,12 @@ export async function GET() {
           running: machine03Running,
         },
       },
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
     });
   } catch (error: any) {
     console.error('Error checking service status:', error);
