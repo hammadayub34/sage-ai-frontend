@@ -12,7 +12,7 @@ export function StatusPanel({ machineId = 'machine-01' }: StatusPanelProps) {
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">System Status</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">System Status</h3>
         <div className="text-gray-400">Loading...</div>
       </div>
     );
@@ -21,7 +21,7 @@ export function StatusPanel({ machineId = 'machine-01' }: StatusPanelProps) {
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">System Status</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">System Status</h3>
         <div className="text-red-400">
           Error loading data: {error instanceof Error ? error.message : String(error)}
         </div>
@@ -35,7 +35,7 @@ export function StatusPanel({ machineId = 'machine-01' }: StatusPanelProps) {
   if (!hasData && !isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">System Status</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">System Status</h3>
         <div className="text-yellow-400 text-sm">
           ⚠️ No data available
         </div>
@@ -45,7 +45,7 @@ export function StatusPanel({ machineId = 'machine-01' }: StatusPanelProps) {
 
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-      <h3 className="text-white text-lg font-semibold mb-4">System Status</h3>
+      <h3 className="heading-inter heading-inter-sm mb-4">System Status</h3>
       <div className="space-y-3">
         <StatusItem 
           label="System Running" 

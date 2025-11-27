@@ -16,7 +16,7 @@ export function GaugePanel({ field, label, max, unit = '', machineId = 'machine-
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">{label}</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">{label}</h3>
         <div className="text-gray-400">Loading...</div>
       </div>
     );
@@ -25,7 +25,7 @@ export function GaugePanel({ field, label, max, unit = '', machineId = 'machine-
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">{label}</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">{label}</h3>
         <div className="text-red-400">Error loading data</div>
       </div>
     );
@@ -41,7 +41,7 @@ export function GaugePanel({ field, label, max, unit = '', machineId = 'machine-
 
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-      <h3 className="text-white text-lg font-semibold mb-4 text-center">{label}</h3>
+      <h3 className="heading-inter heading-inter-sm mb-4 text-center">{label}</h3>
       <div className="flex flex-col items-center justify-center">
         {/* Circular Gauge */}
         <div className="relative w-32 h-32 mb-4">

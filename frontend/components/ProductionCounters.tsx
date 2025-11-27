@@ -12,7 +12,7 @@ export function ProductionCounters({ machineId = 'machine-01' }: ProductionCount
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Production</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">Production</h3>
         <div className="text-gray-400">Loading...</div>
       </div>
     );
@@ -21,7 +21,7 @@ export function ProductionCounters({ machineId = 'machine-01' }: ProductionCount
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Production</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">Production</h3>
         <div className="text-red-400">Error loading data</div>
       </div>
     );
@@ -38,7 +38,7 @@ export function ProductionCounters({ machineId = 'machine-01' }: ProductionCount
   if (!hasData && !isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Production</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">Production</h3>
         <div className="text-yellow-400 text-sm">
           ⚠️ No data available for this machine
           <br />
@@ -52,7 +52,7 @@ export function ProductionCounters({ machineId = 'machine-01' }: ProductionCount
 
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-      <h3 className="text-white text-lg font-semibold mb-4">Production</h3>
+      <h3 className="heading-inter heading-inter-sm mb-4">Production</h3>
       <div className="space-y-4">
         <CounterItem 
           label="Bottles Filled" 

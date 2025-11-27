@@ -36,7 +36,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      // Check if this is a lathe machine (starts with "lathe")
+      if (machineId.startsWith('lathe')) {
+        return await startLatheSim(machineId);
+      } else {
       return await startMockPLC(machineId);
+      }
     } else {
       return NextResponse.json(
         { error: 'Invalid service. Use "influxdb_writer" or "mock_plc"' },
@@ -205,6 +210,106 @@ async function startMockPLC(machineId: string) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || `Failed to start Mock PLC for ${machineId}` },
+      { status: 500 }
+    );
+  }
+}
+
+async function startLatheSim(latheMachineId: string) {
+  try {
+    // Check if already running for this lathe machine using pgrep
+    try {
+      const { stdout: pids } = await execAsync(`pgrep -f "lathe_sim.py"`);
+      if (pids.trim()) {
+        // Check each PID's environment for LATHE_MACHINE_ID
+        const pidList = pids.trim().split('\n');
+        for (const pid of pidList) {
+          try {
+            const { stdout: env } = await execAsync(`ps e -p ${pid} 2>/dev/null | tr ' ' '\\n' | grep "^LATHE_MACHINE_ID=" || echo ""`);
+            if (env.includes(`LATHE_MACHINE_ID=${latheMachineId}`)) {
+              return NextResponse.json({
+                success: true,
+                message: `Lathe simulator for ${latheMachineId} is already running`,
+                alreadyRunning: true,
+              });
+            }
+          } catch {
+            // Process might have exited, continue
+          }
+        }
+      }
+    } catch {
+      // pgrep returns non-zero if not found, which is fine
+    }
+
+    // Start the service in background with better error handling
+    return new Promise<NextResponse>((resolve) => {
+      exec(`cd "${PROJECT_ROOT}" && nohup bash start_lathe_sim.sh ${latheMachineId} > /tmp/lathe_sim_${latheMachineId}.log 2>&1 &`, 
+        async (error) => {
+          if (error) {
+            console.error(`Error starting Lathe Sim for ${latheMachineId}:`, error);
+            resolve(NextResponse.json({
+              success: false,
+              message: `Failed to start: ${error.message}`,
+            }, { status: 500 }));
+            return;
+          }
+
+          // Wait longer for process to start
+          await new Promise(r => setTimeout(r, 3000));
+          
+          // Check if it started using pgrep
+          try {
+            const { stdout: pids } = await execAsync(`pgrep -f "lathe_sim.py"`);
+            let found = false;
+            if (pids.trim()) {
+              const pidList = pids.trim().split('\n');
+              for (const pid of pidList) {
+                try {
+                  const { stdout: env } = await execAsync(`ps e -p ${pid} 2>/dev/null | tr ' ' '\\n' | grep "^LATHE_MACHINE_ID=" || echo ""`);
+                  if (env.includes(`LATHE_MACHINE_ID=${latheMachineId}`)) {
+                    found = true;
+                    break;
+                  }
+                } catch {
+                  // Process might have exited, continue
+                }
+              }
+            }
+            
+            if (found) {
+              resolve(NextResponse.json({
+                success: true,
+                message: `Lathe simulator for ${latheMachineId} started successfully`,
+              }));
+            } else {
+              // Check log for errors
+              try {
+                const { stdout: logContent } = await execAsync(`tail -30 /tmp/lathe_sim_${latheMachineId}.log 2>/dev/null || echo "No log file"`);
+                resolve(NextResponse.json({
+                  success: false,
+                  message: `Failed to start. Check logs for details.`,
+                  logPreview: logContent.toString().substring(0, 300),
+                }, { status: 500 }));
+              } catch {
+                resolve(NextResponse.json({
+                  success: false,
+                  message: `Failed to start Lathe simulator for ${latheMachineId}. Check /tmp/lathe_sim_${latheMachineId}.log for errors.`,
+                }, { status: 500 }));
+              }
+            }
+          } catch (checkError: any) {
+            resolve(NextResponse.json({
+              success: false,
+              message: `Failed to verify start: ${checkError.message}`,
+            }, { status: 500 }));
+          }
+        }
+      );
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error.message || `Failed to start Lathe simulator for ${latheMachineId}` },
       { status: 500 }
     );
   }

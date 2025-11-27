@@ -12,7 +12,7 @@ export function TankStatus({ machineId = 'machine-01' }: TankStatusProps) {
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Tank Status</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">Tank Status</h3>
         <div className="text-gray-400">Loading...</div>
       </div>
     );
@@ -21,7 +21,7 @@ export function TankStatus({ machineId = 'machine-01' }: TankStatusProps) {
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">Tank Status</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">Tank Status</h3>
         <div className="text-red-400">Error loading data</div>
       </div>
     );
@@ -29,7 +29,7 @@ export function TankStatus({ machineId = 'machine-01' }: TankStatusProps) {
 
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-      <h3 className="text-white text-lg font-semibold mb-4">Tank Status</h3>
+      <h3 className="heading-inter heading-inter-sm mb-4">Tank Status</h3>
       <div className="space-y-3">
         <MetricItem 
           label="Temperature" 

@@ -36,11 +36,9 @@ export default function Dashboard() {
     : ['lathe01', 'lathe02', 'lathe03'];
 
   return (
-    <div className="min-h-screen bg-dark-bg text-dark-text p-6">
+    <div className="bg-dark-bg text-dark-text p-6 min-h-screen">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-4">PLC Tags</h1>
-        
         {/* Service Controls */}
         <ServiceControls machineId={machineId} />
         
@@ -97,9 +95,9 @@ export default function Dashboard() {
       </div>
 
       {/* Alarm Events - Real-time from MQTT */}
-            <div className="mb-6">
+      <div className="mb-6">
               <AlarmEvents machineId={machineId} machineType={machineType} />
-            </div>
+      </div>
 
       {/* Tags Table */}
       <TagsTable machineId={machineId} machineType={machineType} />

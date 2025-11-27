@@ -15,7 +15,6 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     status: true,
     counter: true,
-    alarm: true,
     analog: true,
     input: true,
     tooling: true,
@@ -36,7 +35,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <h3 className="heading-inter heading-inter-sm">All Tag Values</h3>
           <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
         </div>
         {isExpanded && <div className="text-gray-400">Loading...</div>}
@@ -51,7 +50,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <h3 className="heading-inter heading-inter-sm">All Tag Values</h3>
           <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
         </div>
         {isExpanded && <div className="text-red-400">Error loading data</div>}
@@ -69,7 +68,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
+          <h3 className="heading-inter heading-inter-sm">All Tag Values</h3>
           <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
         </div>
         {isExpanded && (
@@ -92,7 +91,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
   if (!data) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">All Tag Values</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">All Tag Values</h3>
         <div className="text-red-400">Error loading data</div>
       </div>
     );
@@ -125,19 +124,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
     { label: 'Bottles Per Minute', value: data.BottlesPerMinute, type: 'number' },
   ];
 
-  const alarmFields = isLathe ? [
-    { label: 'Alarm Spindle Overload', value: data.AlarmSpindleOverload, type: 'boolean' },
-    { label: 'Alarm Chuck Not Clamped', value: data.AlarmChuckNotClamped, type: 'boolean' },
-    { label: 'Alarm Door Open', value: data.AlarmDoorOpen, type: 'boolean' },
-    { label: 'Alarm Tool Wear', value: data.AlarmToolWear, type: 'boolean' },
-    { label: 'Alarm Coolant Low', value: data.AlarmCoolantLow, type: 'boolean' },
-  ] : [
-    { label: 'Alarm Fault', value: data.AlarmFault, type: 'boolean' },
-    { label: 'Alarm Overfill', value: data.AlarmOverfill, type: 'boolean' },
-    { label: 'Alarm Underfill', value: data.AlarmUnderfill, type: 'boolean' },
-    { label: 'Alarm Low Product Level', value: data.AlarmLowProductLevel, type: 'boolean' },
-    { label: 'Alarm Cap Missing', value: data.AlarmCapMissing, type: 'boolean' },
-  ];
+  // Alarm fields removed - shown in Alarm Events and Alarm History sections instead
 
   const analogFields = isLathe ? [
     { label: 'Spindle Speed', value: data.SpindleSpeed, type: 'number', unit: 'RPM' },
@@ -179,10 +166,19 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
 
   const formatValue = (value: any, type: string, unit?: string) => {
     if (type === 'boolean') {
-      return value ? '✓ TRUE' : '✗ FALSE';
+      return value ? 'TRUE' : 'FALSE';
     }
     if (type === 'number') {
-      return `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
+      // Format large numbers with commas
+      const num = typeof value === 'number' ? value : parseFloat(value);
+      if (isNaN(num)) return 'N/A';
+      
+      // For whole numbers, don't show decimals
+      if (num % 1 === 0) {
+        return `${num.toLocaleString()}${unit ? ` ${unit}` : ''}`;
+      }
+      // For decimals, show 2 decimal places
+      return `${num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${unit ? ` ${unit}` : ''}`;
     }
     return String(value);
   };
@@ -218,209 +214,212 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
       <div 
-        className="flex items-center justify-between mb-4 cursor-pointer hover:opacity-80 transition-opacity"
+        className="flex items-center gap-2 mb-4 cursor-pointer hover:opacity-80 transition-opacity"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-2">
         <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
-        </div>
-        {isExpanded && (
-        <div className="text-gray-400 text-sm">
-          Last updated: {formatESTTime(data._time)}
-        </div>
-        )}
+        <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
       </div>
 
       {isExpanded && (
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-dark-border">
-              <th className="text-left text-gray-400 py-2 px-4">Field</th>
-              <th className="text-left text-gray-400 py-2 px-4">Value</th>
-              <th className="text-left text-gray-400 py-2 px-4">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Timestamp Row */}
-            {data._time && (
-              <tr className="border-b border-dark-border bg-midnight-200/30">
-                <td colSpan={3} className="text-gray-400 text-xs py-2 px-4">
-                  📅 Data Timestamp: {formatESTTime(data._time)}
-                </td>
-              </tr>
-            )}
-            
-            {/* Status Fields */}
-            <tr 
-              className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-              onClick={() => toggleSection('status')}
-            >
-              <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                <div className="flex items-center justify-between">
-                  <span>STATUS FIELDS</span>
-                  <span className="text-xs">{expandedSections.status ? '▼' : '▶'}</span>
-                </div>
-              </td>
-            </tr>
-            {expandedSections.status && statusFields.map((field) => (
-              <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                <td className="text-dark-text py-2 px-4">{field.label}</td>
-                <td className={`py-2 px-4 ${getStatusColor(field.value, field.type)}`}>
-                  {formatValue(field.value, field.type)}
-                </td>
-                <td className="py-2 px-4">
-                  <div className={`w-2 h-2 rounded-full ${field.value ? 'bg-green-500' : 'bg-gray-600'}`} />
-                </td>
-              </tr>
-            ))}
+      <div className="space-y-4">
+        {/* Timestamp */}
+        {data._time && (
+          <div className="bg-midnight-200/30 border border-dark-border rounded-lg p-3">
+            <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <span>📅</span>
+              <span>Last updated: {formatESTTime(data._time)}</span>
+            </div>
+          </div>
+        )}
 
-            {/* Counter Fields */}
-            <tr 
-              className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-              onClick={() => toggleSection('counter')}
-            >
-              <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                <div className="flex items-center justify-between">
-                  <span>COUNTER FIELDS</span>
-                  <span className="text-xs">{expandedSections.counter ? '▼' : '▶'}</span>
-                </div>
-              </td>
-            </tr>
-            {expandedSections.counter && counterFields.map((field) => (
-              <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                <td className="text-dark-text py-2 px-4">{field.label}</td>
-                <td className="text-white py-2 px-4">{formatValue(field.value, field.type)}</td>
-                <td className="py-2 px-4">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                </td>
-              </tr>
-            ))}
-
-            {/* Alarm Fields */}
-            <tr 
-              className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-              onClick={() => toggleSection('alarm')}
-            >
-              <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                <div className="flex items-center justify-between">
-                  <span>ALARM FIELDS</span>
-                  <span className="text-xs">{expandedSections.alarm ? '▼' : '▶'}</span>
-                </div>
-              </td>
-            </tr>
-            {expandedSections.alarm && alarmFields.map((field) => (
-              <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                <td className="text-dark-text py-2 px-4">{field.label}</td>
-                <td className={`py-2 px-4 ${getStatusColor(field.value, field.type, true)}`}>
-                  {formatValue(field.value, field.type)}
-                </td>
-                <td className="py-2 px-4">
-                  <div className={`w-2 h-2 rounded-full ${field.value ? 'bg-red-500' : 'bg-green-500'}`} />
-                </td>
-              </tr>
-            ))}
-
-            {/* Analog Fields */}
-            <tr 
-              className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-              onClick={() => toggleSection('analog')}
-            >
-              <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                <div className="flex items-center justify-between">
-                  <span>ANALOG FIELDS</span>
-                  <span className="text-xs">{expandedSections.analog ? '▼' : '▶'}</span>
-                </div>
-              </td>
-            </tr>
-            {expandedSections.analog && analogFields.map((field) => (
-              <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                <td className="text-dark-text py-2 px-4">{field.label}</td>
-                <td className="text-white py-2 px-4">{formatValue(field.value, field.type, field.unit)}</td>
-                <td className="py-2 px-4">
-                  <div className="w-2 h-2 rounded-full bg-gray-500" />
-                </td>
-              </tr>
-            ))}
-
-            {/* Input Fields / Safety Fields */}
-            <tr 
-              className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-              onClick={() => toggleSection('input')}
-            >
-              <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                <div className="flex items-center justify-between">
-                  <span>{isLathe ? 'SAFETY FIELDS' : 'INPUT FIELDS'}</span>
-                  <span className="text-xs">{expandedSections.input ? '▼' : '▶'}</span>
-                </div>
-              </td>
-            </tr>
-            {expandedSections.input && inputFields.map((field) => (
-              <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                <td className="text-dark-text py-2 px-4">{field.label}</td>
-                <td className={`py-2 px-4 ${getStatusColor(field.value, field.type)}`}>
-                  {formatValue(field.value, field.type)}
-                </td>
-                <td className="py-2 px-4">
-                  <div className={`w-2 h-2 rounded-full ${field.value ? 'bg-green-500' : 'bg-gray-600'}`} />
-                </td>
-              </tr>
-            ))}
-
-            {/* Tooling Fields (Lathe only) */}
-            {isLathe && toolingFields.length > 0 && (
-              <>
-                <tr 
-                  className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-                  onClick={() => toggleSection('tooling')}
+        {/* Status Fields */}
+        <div className="border border-dark-border rounded-lg overflow-hidden">
+          <div 
+            className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
+            onClick={() => toggleSection('status')}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚙️</span>
+              <span className="text-gray-300 heading-inter heading-inter-sm">Status Fields</span>
+            </div>
+            <span className="text-gray-500 text-sm">{expandedSections.status ? '▼' : '▶'}</span>
+          </div>
+          {expandedSections.status && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+              {statusFields.map((field) => (
+                <div 
+                  key={field.label} 
+                  className={`border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors ${
+                    field.value ? 'bg-green-500/10' : 'bg-gray-800/30'
+                  }`}
                 >
-                  <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                    <div className="flex items-center justify-between">
-                      <span>TOOLING FIELDS</span>
-                      <span className="text-xs">{expandedSections.tooling ? '▼' : '▶'}</span>
-                    </div>
-                  </td>
-                </tr>
-                {expandedSections.tooling && toolingFields.map((field) => (
-                  <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                    <td className="text-dark-text py-2 px-4">{field.label}</td>
-                    <td className="text-white py-2 px-4">{formatValue(field.value, field.type, field.unit)}</td>
-                    <td className="py-2 px-4">
-                      <div className="w-2 h-2 rounded-full bg-gray-500" />
-                    </td>
-                  </tr>
-                ))}
-              </>
-            )}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm">{field.label}</span>
+                    <div className={`w-3 h-3 rounded-full ${field.value ? 'bg-green-500' : 'bg-gray-600'}`} />
+                  </div>
+                  <div className={`text-xl font-bold ${getStatusColor(field.value, field.type)}`}>
+                    {field.value ? '✓' : '✗'} {formatValue(field.value, field.type)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-            {/* Coolant Fields (Lathe only) */}
-            {isLathe && coolantFields.length > 0 && (
-              <>
-                <tr 
-                  className="border-b border-dark-border cursor-pointer hover:bg-midnight-300/50 transition-colors"
-                  onClick={() => toggleSection('coolant')}
+        {/* Counter Fields */}
+        <div className="border border-dark-border rounded-lg overflow-hidden">
+          <div 
+            className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
+            onClick={() => toggleSection('counter')}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📊</span>
+              <span className="text-gray-300 heading-inter heading-inter-sm">Counter Fields</span>
+            </div>
+            <span className="text-gray-500 text-sm">{expandedSections.counter ? '▼' : '▶'}</span>
+          </div>
+          {expandedSections.counter && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+              {counterFields.map((field) => (
+                <div 
+                  key={field.label} 
+                  className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
                 >
-                  <td colSpan={3} className="text-gray-400 text-sm font-semibold py-2 px-4 bg-midnight-200">
-                    <div className="flex items-center justify-between">
-                      <span>COOLANT FIELDS</span>
-                      <span className="text-xs">{expandedSections.coolant ? '▼' : '▶'}</span>
+                  <div className="text-gray-400 text-sm mb-2">{field.label}</div>
+                  <div className="text-2xl font-bold text-white">
+                    {formatValue(field.value, field.type)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Analog Fields */}
+        <div className="border border-dark-border rounded-lg overflow-hidden">
+          <div 
+            className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
+            onClick={() => toggleSection('analog')}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📈</span>
+              <span className="text-gray-300 heading-inter heading-inter-sm">Analog Fields</span>
+            </div>
+            <span className="text-gray-500 text-sm">{expandedSections.analog ? '▼' : '▶'}</span>
+          </div>
+          {expandedSections.analog && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+              {analogFields.map((field) => (
+                <div 
+                  key={field.label} 
+                  className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
+                >
+                  <div className="text-gray-400 text-sm mb-2">{field.label}</div>
+                  <div className="text-2xl font-bold text-white">
+                    {formatValue(field.value, field.type, field.unit)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Input Fields / Safety Fields */}
+        <div className="border border-dark-border rounded-lg overflow-hidden">
+          <div 
+            className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
+            onClick={() => toggleSection('input')}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔒</span>
+              <span className="text-gray-300 heading-inter heading-inter-sm">{isLathe ? 'Safety Fields' : 'Input Fields'}</span>
+            </div>
+            <span className="text-gray-500 text-sm">{expandedSections.input ? '▼' : '▶'}</span>
+          </div>
+          {expandedSections.input && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+              {inputFields.map((field) => (
+                <div 
+                  key={field.label} 
+                  className={`border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors ${
+                    field.value ? 'bg-green-500/10' : 'bg-gray-800/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm">{field.label}</span>
+                    <div className={`w-3 h-3 rounded-full ${field.value ? 'bg-green-500' : 'bg-gray-600'}`} />
+                  </div>
+                  <div className={`text-xl font-bold ${getStatusColor(field.value, field.type)}`}>
+                    {field.value ? '✓' : '✗'} {formatValue(field.value, field.type)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Tooling Fields (Lathe only) */}
+        {isLathe && toolingFields.length > 0 && (
+          <div className="border border-dark-border rounded-lg overflow-hidden">
+            <div 
+              className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
+              onClick={() => toggleSection('tooling')}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔧</span>
+                <span className="text-gray-300 heading-inter heading-inter-sm">Tooling Fields</span>
+              </div>
+              <span className="text-gray-500 text-sm">{expandedSections.tooling ? '▼' : '▶'}</span>
+            </div>
+            {expandedSections.tooling && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                {toolingFields.map((field) => (
+                  <div 
+                    key={field.label} 
+                    className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
+                  >
+                    <div className="text-gray-400 text-sm mb-2">{field.label}</div>
+                    <div className="text-2xl font-bold text-white">
+                      {formatValue(field.value, field.type, field.unit)}
                     </div>
-                  </td>
-                </tr>
-                {expandedSections.coolant && coolantFields.map((field) => (
-                  <tr key={field.label} className="border-b border-dark-border hover:bg-midnight-200/20">
-                    <td className="text-dark-text py-2 px-4">{field.label}</td>
-                    <td className="text-white py-2 px-4">{formatValue(field.value, field.type, field.unit)}</td>
-                    <td className="py-2 px-4">
-                      <div className="w-2 h-2 rounded-full bg-gray-500" />
-                    </td>
-                  </tr>
+                  </div>
                 ))}
-              </>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        )}
+
+        {/* Coolant Fields (Lathe only) */}
+        {isLathe && coolantFields.length > 0 && (
+          <div className="border border-dark-border rounded-lg overflow-hidden">
+            <div 
+              className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
+              onClick={() => toggleSection('coolant')}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">💧</span>
+                <span className="text-gray-300 heading-inter heading-inter-sm">Coolant Fields</span>
+              </div>
+              <span className="text-gray-500 text-sm">{expandedSections.coolant ? '▼' : '▶'}</span>
+            </div>
+            {expandedSections.coolant && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                {coolantFields.map((field) => (
+                  <div 
+                    key={field.label} 
+                    className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
+                  >
+                    <div className="text-gray-400 text-sm mb-2">{field.label}</div>
+                    <div className="text-2xl font-bold text-white">
+                      {formatValue(field.value, field.type, field.unit)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       )}
     </div>

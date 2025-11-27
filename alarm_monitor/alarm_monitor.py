@@ -96,12 +96,12 @@ def check_alarm_transitions(machine_id, alarms, timestamp, machine_type="bottlef
             "coolant_low": "AlarmCoolantLow",
         }
     else:  # bottlefiller
-        alarm_map = {
-            "Overfill": "AlarmOverfill",
-            "Underfill": "AlarmUnderfill",
-            "LowProductLevel": "AlarmLowProductLevel",
-            "CapMissing": "AlarmCapMissing",
-        }
+    alarm_map = {
+        "Overfill": "AlarmOverfill",
+        "Underfill": "AlarmUnderfill",
+        "LowProductLevel": "AlarmLowProductLevel",
+        "CapMissing": "AlarmCapMissing",
+    }
     
     # Get previous state for this machine
     prev = previous_alarms.get(machine_id, {})
@@ -213,16 +213,16 @@ def on_message(client, userdata, msg):
             if "coolant_low" in payload:
                 alarms["coolant_low"] = payload["coolant_low"]
         else:  # bottlefiller
-            # Map alarm names from MQTT to our tracking format
-            if "LowProductLevel" in payload:
-                alarms["LowProductLevel"] = payload["LowProductLevel"]
-            if "Overfill" in payload:
-                alarms["Overfill"] = payload["Overfill"]
-            if "Underfill" in payload:
-                alarms["Underfill"] = payload["Underfill"]
-            if "CapMissing" in payload:
-                alarms["CapMissing"] = payload["CapMissing"]
-            # NoBottle is in MQTT but we don't track it
+        # Map alarm names from MQTT to our tracking format
+        if "LowProductLevel" in payload:
+            alarms["LowProductLevel"] = payload["LowProductLevel"]
+        if "Overfill" in payload:
+            alarms["Overfill"] = payload["Overfill"]
+        if "Underfill" in payload:
+            alarms["Underfill"] = payload["Underfill"]
+        if "CapMissing" in payload:
+            alarms["CapMissing"] = payload["CapMissing"]
+        # NoBottle is in MQTT but we don't track it
         
         # Check for alarm transitions
         if alarms:

@@ -13,10 +13,15 @@ export async function GET() {
     // Check if InfluxDB writer is running
     const influxdbWriterRunning = await checkProcessRunning('influxdb_writer_production.py');
     
-    // Check if mock PLC agents are running for each machine
+    // Check if mock PLC agents are running for each bottle filler machine
     const machine01Running = await checkProcessRunning('mock_plc_agent.py', 'machine-01');
     const machine02Running = await checkProcessRunning('mock_plc_agent.py', 'machine-02');
     const machine03Running = await checkProcessRunning('mock_plc_agent.py', 'machine-03');
+    
+    // Check if lathe simulators are running for each lathe machine
+    const lathe01Running = await checkLatheProcessRunning('lathe01');
+    const lathe02Running = await checkLatheProcessRunning('lathe02');
+    const lathe03Running = await checkLatheProcessRunning('lathe03');
 
     return NextResponse.json({
       influxdbWriter: {
@@ -31,6 +36,15 @@ export async function GET() {
         },
         'machine-03': {
           running: machine03Running,
+        },
+        'lathe01': {
+          running: lathe01Running,
+        },
+        'lathe02': {
+          running: lathe02Running,
+        },
+        'lathe03': {
+          running: lathe03Running,
         },
       },
     }, {
@@ -80,6 +94,37 @@ async function checkProcessRunning(scriptName: string, machineId?: string): Prom
       const { stdout } = await execAsync(`pgrep -f "${scriptName}"`);
       return stdout.trim().length > 0;
     }
+  } catch (error) {
+    // pgrep returns non-zero exit code if no process found, which is OK
+    return false;
+  }
+}
+
+async function checkLatheProcessRunning(latheMachineId: string): Promise<boolean> {
+  try {
+    // For lathe sim, we need to check the process environment variables
+    // First get all PIDs for lathe_sim.py
+    let command = `pgrep -f "lathe_sim.py"`;
+    const { stdout: pids } = await execAsync(command);
+    
+    if (!pids.trim()) {
+      return false;
+    }
+    
+    // Check each PID's environment for LATHE_MACHINE_ID
+    const pidList = pids.trim().split('\n');
+    for (const pid of pidList) {
+      try {
+        // Check if this process has the matching LATHE_MACHINE_ID in its environment
+        const { stdout: env } = await execAsync(`ps e -p ${pid} 2>/dev/null | tr ' ' '\\n' | grep "^LATHE_MACHINE_ID=" || echo ""`);
+        if (env.includes(`LATHE_MACHINE_ID=${latheMachineId}`)) {
+          return true;
+        }
+      } catch {
+        // Process might have exited, continue
+      }
+    }
+    return false;
   } catch (error) {
     // pgrep returns non-zero exit code if no process found, which is OK
     return false;

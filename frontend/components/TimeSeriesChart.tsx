@@ -23,7 +23,7 @@ export function TimeSeriesChart({
   if (isLoading) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">{label}</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">{label}</h3>
         <div className="text-gray-400">Loading chart data...</div>
       </div>
     );
@@ -32,7 +32,7 @@ export function TimeSeriesChart({
   if (error) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">{label}</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">{label}</h3>
         <div className="text-red-400">
           <div className="mb-2">Error loading chart data</div>
           <div className="text-sm text-gray-500">{error instanceof Error ? error.message : String(error)}</div>
@@ -47,7 +47,7 @@ export function TimeSeriesChart({
   if (!data || !Array.isArray(data) || data.length === 0) {
     return (
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-        <h3 className="text-white text-lg font-semibold mb-4">{label}</h3>
+        <h3 className="heading-inter heading-inter-sm mb-4">{label}</h3>
         <div className="text-yellow-400">
           <div className="mb-2">No data available for this time range</div>
           <div className="text-sm text-gray-500">
@@ -75,7 +75,7 @@ export function TimeSeriesChart({
 
   return (
     <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-      <h3 className="text-white text-lg font-semibold mb-4">{label}</h3>
+      <h3 className="heading-inter heading-inter-sm mb-4">{label}</h3>
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#404040" />

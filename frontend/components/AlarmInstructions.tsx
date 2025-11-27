@@ -72,7 +72,7 @@ function formatInstructions(text: string) {
                            ['IMMEDIATE ACTIONS', 'TROUBLESHOOTING', 'RESOLUTION', 'VERIFICATION', 'STATUS', 'POST-RESOLUTION', 'IMPORTANT NOTES'].some(h => headerText.includes(h));
       elements.push(
         <div key={key++} className={`mt-6 mb-3 ${i > 0 ? 'pt-4 border-t border-dark-border' : ''}`}>
-          <h4 className={`${isMainSection ? 'text-lg' : 'text-base'} font-bold text-white flex items-center gap-2`}>
+          <h4 className={`${isMainSection ? 'heading-inter-sm' : 'heading-inter heading-inter-sm'} flex items-center gap-2`}>
             {isMainSection && (
               <span className="text-midnight-300">
                 {headerText.includes('IMMEDIATE') ? '🚨' : 
@@ -146,6 +146,12 @@ interface RAGResponse {
   alarm_type: string;
   machine_type: string;
   state: string;
+  timings?: {
+    embedding: number;
+    pinecone: number;
+    llm: number;
+    total: number;
+  };
 }
 
 export function AlarmInstructions({
@@ -161,6 +167,7 @@ export function AlarmInstructions({
 
   useEffect(() => {
     async function fetchInstructions() {
+      const clientStartTime = performance.now();
       try {
         setLoading(true);
         const response = await fetch('/api/alarms/rag', {
@@ -181,6 +188,21 @@ export function AlarmInstructions({
         }
 
         const result = await response.json();
+        const clientEndTime = performance.now();
+        const clientTotalTime = clientEndTime - clientStartTime;
+        
+        // Log timing information
+        console.log('⏱️ [RAG Client] Total client-side time:', clientTotalTime.toFixed(2), 'ms');
+        if (result.timings) {
+          console.log('⏱️ [RAG Server] Breakdown:', {
+            embedding: `${result.timings.embedding}ms`,
+            pinecone: `${result.timings.pinecone}ms`,
+            llm: `${result.timings.llm}ms`,
+            serverTotal: `${result.timings.total}ms`,
+            clientTotal: `${clientTotalTime.toFixed(2)}ms`,
+          });
+        }
+        
         setData(result);
       } catch (err: any) {
         setError(err.message || 'Failed to load instructions');
@@ -219,7 +241,7 @@ export function AlarmInstructions({
     <div className="bg-dark-panel rounded-lg border border-dark-border max-w-4xl max-h-[85vh] flex flex-col">
       <div className="flex items-center justify-between p-6 pb-4 border-b border-dark-border flex-shrink-0">
         <div>
-          <h3 className="text-white text-xl font-bold flex items-center gap-2">
+          <h3 className="heading-inter heading-inter-md flex items-center gap-2">
             {state === 'RAISED' ? (
               <>
                 <span className="text-red-400">🚨</span>

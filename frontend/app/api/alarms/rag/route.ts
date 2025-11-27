@@ -15,6 +15,9 @@ interface RAGRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  const timings: Record<string, number> = {};
+  
   try {
     const body: RAGRequest = await request.json();
     const { alarm_type, machine_type, state, machine_id } = body;
@@ -26,11 +29,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create query embedding
+    // Step 1: Create query embedding
+    const embeddingStart = Date.now();
     const queryText = `${alarm_type} alarm for ${machine_type} machine ${state}`;
     const queryEmbedding = await createEmbedding(queryText);
+    timings.embedding = Date.now() - embeddingStart;
+    console.log(`[RAG] Embedding created in ${timings.embedding}ms`);
 
-    // Query Pinecone
+    // Step 2: Query Pinecone
+    const pineconeStart = Date.now();
     const index = await getPineconeIndex();
     
     // Filter by machine type and alarm name (normalize alarm name)
@@ -47,6 +54,8 @@ export async function POST(request: NextRequest) {
         alarm_name: { $eq: normalizedAlarmName },
       },
     });
+    timings.pinecone = Date.now() - pineconeStart;
+    console.log(`[RAG] Pinecone query completed in ${timings.pinecone}ms`);
 
     // Extract relevant chunks
     const chunks = queryResponse.matches.map((match: any) => ({
@@ -63,58 +72,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Generate response using LLM
+    // Step 3: Generate response using LLM
+    const llmStart = Date.now();
     const context = chunks.map((c, i) => `[Chunk ${i + 1}]\n${c.content}`).join('\n\n');
     
-    const prompt = `You are an industrial automation expert. Based on the following alarm response procedures from the manual, provide clear, actionable instructions for operators.
+    const prompt = `Industrial automation expert. Provide alarm response instructions focused specifically on this alarm issue.
 
-Alarm: ${alarm_type}
-Machine Type: ${machine_type}
-State: ${state}
-Machine ID: ${machine_id || 'N/A'}
+Alarm: ${alarm_type} | Machine: ${machine_type} | State: ${state} | ID: ${machine_id || 'N/A'}
 
 Relevant Procedures:
 ${context}
 
 ${state === 'RAISED' 
-  ? `Provide a well-structured response with the following sections. Write in clear, professional prose - NOT just bullet points. Use full sentences and paragraphs where appropriate:
-
-**IMMEDIATE ACTIONS**
-Write 2-4 critical immediate actions that must be taken right away. Use full sentences, not bullet points. Start each action with a clear imperative verb (e.g., "STOP the operation...", "Check the indicator...", "Verify the sensor..."). Each action should be a complete sentence explaining what to do and why.
-
-**TROUBLESHOOTING STEPS**
-Provide 3-5 key troubleshooting steps. Write each step as a complete sentence or short paragraph explaining what to check, how to check it, and what to look for. Be specific and actionable. Use full sentences, not bullet points.
-
-**RESOLUTION STEPS**
-Provide step-by-step resolution instructions. Write each step as a complete sentence or short paragraph. Include specific actions, settings, or procedures. Explain what to do, how to do it, and what to expect. Use full sentences, not bullet points.
-
-**IMPORTANT NOTES**
-Add any critical warnings, safety considerations, or important reminders. Write in complete sentences.`
-
-  : `Provide a well-structured response with the following sections. Write in clear, professional prose - NOT just bullet points. Use full sentences and paragraphs where appropriate:
-
-**STATUS CONFIRMATION**
-Confirm that the alarm has been cleared and what this means. Write in complete sentences, not bullet points.
-
-**VERIFICATION STEPS**
-Provide 3-5 verification steps to ensure the issue is fully resolved. Write each step as a complete sentence or short paragraph explaining what to verify, how to verify it, and what indicates success. Use full sentences, not bullet points.
-
-**POST-RESOLUTION CHECKS**
-List any follow-up checks or monitoring that should be performed. Write in complete sentences, explaining what to monitor and for how long. Use full sentences, not bullet points.
-
-**IMPORTANT NOTES**
-Add any important reminders or preventive measures. Write in complete sentences.`}
-
-IMPORTANT FORMATTING RULES:
-- Use **bold headers** for section titles (e.g., **IMMEDIATE ACTIONS**)
-- Write in complete sentences and paragraphs, NOT bullet points
-- Use numbered lists (1., 2., 3.) ONLY when listing sequential steps that must be followed in order
-- For most content, use full sentences and paragraphs
-- Be specific, actionable, and professional
-- Each instruction should be clear and self-contained`;
+  ? `Format: **IMMEDIATE ACTIONS** (2-4 actions, full sentences directly related to this alarm), **TROUBLESHOOTING STEPS** (3-5 steps, full sentences focused on this specific issue), **RESOLUTION STEPS** (step-by-step, full sentences addressing this alarm), **IMPORTANT NOTES** (warnings/safety specific to this alarm). Use **bold headers**, full sentences/paragraphs (NOT bullets), numbered lists only for sequential steps. Write clear, concise sentences that directly address this alarm issue.`
+  : `Format: **STATUS CONFIRMATION** (cleared status, full sentences about this specific alarm), **VERIFICATION STEPS** (3-5 steps, full sentences verifying this alarm is resolved), **POST-RESOLUTION CHECKS** (monitoring, full sentences about this alarm), **IMPORTANT NOTES** (reminders specific to this alarm). Use **bold headers**, full sentences/paragraphs (NOT bullets). Write clear, concise sentences that directly address this alarm issue.`}`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
@@ -130,6 +104,11 @@ IMPORTANT FORMATTING RULES:
     });
 
     const instructions = completion.choices[0]?.message?.content || 'Unable to generate instructions.';
+    timings.llm = Date.now() - llmStart;
+    timings.total = Date.now() - startTime;
+    
+    console.log(`[RAG] LLM completion in ${timings.llm}ms`);
+    console.log(`[RAG] Total time: ${timings.total}ms (Embedding: ${timings.embedding}ms, Pinecone: ${timings.pinecone}ms, LLM: ${timings.llm}ms)`);
 
     return NextResponse.json({
       instructions,
@@ -141,6 +120,7 @@ IMPORTANT FORMATTING RULES:
       alarm_type,
       machine_type,
       state,
+      timings, // Include timing info for debugging
     });
   } catch (error: any) {
     console.error('RAG API error:', error);

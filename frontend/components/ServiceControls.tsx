@@ -8,6 +8,9 @@ interface ServiceStatus {
     'machine-01': { running: boolean };
     'machine-02': { running: boolean };
     'machine-03': { running: boolean };
+    'lathe01': { running: boolean };
+    'lathe02': { running: boolean };
+    'lathe03': { running: boolean };
   };
 }
 
@@ -23,6 +26,9 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
       'machine-01': { running: false },
       'machine-02': { running: false },
       'machine-03': { running: false },
+      'lathe01': { running: false },
+      'lathe02': { running: false },
+      'lathe03': { running: false },
     },
   });
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -103,14 +109,17 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         if (response.ok && isMounted) {
           const data = await response.json();
           console.log('Status fetched:', data);
-          // Only update if data actually changed to prevent unnecessary re-renders
-          setStatus(prev => {
-            const prevStr = JSON.stringify(prev);
-            const newStr = JSON.stringify(data);
-            if (prevStr !== newStr) {
-              return data;
-            }
-            return prev;
+          // Always update status to ensure UI reflects current state
+          setStatus({
+            influxdbWriter: { running: data.influxdbWriter?.running ?? false },
+            machines: {
+              'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
+              'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
+              'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
+              'lathe01': { running: data.machines?.['lathe01']?.running ?? false },
+              'lathe02': { running: data.machines?.['lathe02']?.running ?? false },
+              'lathe03': { running: data.machines?.['lathe03']?.running ?? false },
+            },
           });
           setError(null);
         }
@@ -128,12 +137,12 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
       }
     }, 100);
 
-    // Poll every 2 seconds to keep status updated
+    // Poll every 1 second to keep status updated more responsively
     pollInterval = setInterval(() => {
       if (isMounted) {
-    fetchStatus();
+        fetchStatus();
       }
-    }, 2000);
+    }, 1000);
 
     return () => {
       isMounted = false;
@@ -192,7 +201,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         }
         
         // Refresh status multiple times to catch the service starting
-        // Try immediately, then after 1s, 2s, and 3s
+        // Try immediately, then every 500ms for up to 5 seconds
         const refreshStatus = (attempt: number = 0) => {
           // Use timestamp to prevent caching
           fetch(`/api/services/status?t=${Date.now()}`, {
@@ -205,6 +214,20 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
             .then(data => {
               console.log(`Status refreshed (attempt ${attempt}):`, data);
               
+              // Always update status immediately to trigger re-render
+              const newStatus = {
+                influxdbWriter: { running: data.influxdbWriter?.running ?? false },
+                machines: {
+                  'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
+                  'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
+                  'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
+                  'lathe01': { running: data.machines?.['lathe01']?.running ?? false },
+                  'lathe02': { running: data.machines?.['lathe02']?.running ?? false },
+                  'lathe03': { running: data.machines?.['lathe03']?.running ?? false },
+                },
+              };
+              setStatus(newStatus);
+              
               // Check if service is now running
               const isRunning = service === 'influxdb_writer' 
                 ? data.influxdbWriter?.running 
@@ -212,51 +235,16 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
               
               console.log(`Service ${service} running status: ${isRunning} (attempt ${attempt})`);
               
-              // Always update status to trigger re-render, even if not running yet
-              setStatus(prev => {
-                // Create a completely new object to force React to re-render
-                const newStatus = {
-                  influxdbWriter: { running: data.influxdbWriter?.running ?? false },
-                  machines: {
-                    'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
-                    'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
-                    'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
-                  },
-                };
-                console.log('Setting new status:', newStatus);
-                return newStatus;
-              });
-              
               if (isRunning) {
                 // Service is running, clear loading state immediately
                 console.log(`✅ Service ${service} is now running! Clearing loading state.`);
-                setLoading(prev => {
-                  const newLoading = { ...prev, [service]: false };
-                  console.log('New loading state:', newLoading);
-                  return newLoading;
-                });
-                // Force one more status update to ensure UI is in sync
-                setTimeout(() => {
-                  fetch(`/api/services/status?t=${Date.now()}`, { cache: 'no-store' })
-                    .then(res => res.json())
-                    .then(finalData => {
-                      console.log('Final status update after start:', finalData);
-                      setStatus({
-                        influxdbWriter: { running: finalData.influxdbWriter?.running ?? false },
-                        machines: {
-                          'machine-01': { running: finalData.machines?.['machine-01']?.running ?? false },
-                          'machine-02': { running: finalData.machines?.['machine-02']?.running ?? false },
-                          'machine-03': { running: finalData.machines?.['machine-03']?.running ?? false },
-                        },
-                      });
-                    });
-                }, 300);
+                setLoading(prev => ({ ...prev, [service]: false }));
                 // Don't continue polling - we're done
                 return;
-              } else if (attempt < 8) {
-                // Service not running yet, try again (increased to 8 attempts)
-                console.log(`Service ${service} not running yet, retrying in 1s (attempt ${attempt + 1}/8)`);
-                setTimeout(() => refreshStatus(attempt + 1), 1000);
+              } else if (attempt < 10) {
+                // Service not running yet, try again more frequently (every 500ms)
+                console.log(`Service ${service} not running yet, retrying in 500ms (attempt ${attempt + 1}/10)`);
+                setTimeout(() => refreshStatus(attempt + 1), 500);
               } else {
                 // Max attempts reached, clear loading anyway
                 console.log(`Max attempts reached for ${service}, clearing loading state`);
@@ -268,13 +256,16 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
               // Clear loading on error after a delay
               if (attempt >= 3) {
                 setLoading(prev => ({ ...prev, [service]: false }));
+              } else {
+                // Retry on error
+                setTimeout(() => refreshStatus(attempt + 1), 500);
               }
             });
         };
         
-        // Start refreshing status immediately
+        // Start refreshing status immediately (first check after 200ms to give process time to start)
         console.log(`Starting status refresh for ${service}...`);
-        refreshStatus(0);
+        setTimeout(() => refreshStatus(0), 200);
       } else {
         const errorMsg = data.message || data.error || 'Failed to start service';
         const logPreview = data.logPreview ? `\n\nLog preview:\n${data.logPreview}` : '';
@@ -325,42 +316,62 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         setError(null);
         // Refresh status multiple times to catch the service stopping
         const refreshStatus = (attempt: number = 0) => {
-          fetch('/api/services/status', {
-            cache: 'no-store', // Prevent caching
+          fetch(`/api/services/status?t=${Date.now()}`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache',
+            },
           })
             .then(res => res.json())
             .then(data => {
               console.log(`Status refreshed after stop (attempt ${attempt}):`, data);
-              // Force a new object reference to trigger re-render
-              setStatus({ ...data });
+              
+              // Always update status immediately to trigger re-render
+              const newStatus = {
+                influxdbWriter: { running: data.influxdbWriter?.running ?? false },
+                machines: {
+                  'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
+                  'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
+                  'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
+                  'lathe01': { running: data.machines?.['lathe01']?.running ?? false },
+                  'lathe02': { running: data.machines?.['lathe02']?.running ?? false },
+                  'lathe03': { running: data.machines?.['lathe03']?.running ?? false },
+                },
+              };
+              setStatus(newStatus);
               
               // Check if service is now stopped
               const isRunning = service === 'influxdb_writer' 
                 ? data.influxdbWriter?.running 
                 : data.machines?.[machineId]?.running;
               
-              if (!isRunning && attempt < 3) {
+              if (!isRunning) {
                 // Service is stopped, clear loading state
+                console.log(`✅ Service ${service} is now stopped! Clearing loading state.`);
                 setLoading(prev => ({ ...prev, [service]: false }));
-              } else if (isRunning && attempt < 3) {
-                // Service still running, try again
+              } else if (attempt < 10) {
+                // Service still running, try again (every 500ms)
                 setTimeout(() => refreshStatus(attempt + 1), 500);
               } else {
                 // Max attempts reached, clear loading anyway
+                console.log(`Max attempts reached for ${service} stop, clearing loading state`);
                 setLoading(prev => ({ ...prev, [service]: false }));
               }
             })
             .catch(err => {
               console.error('Error refreshing status:', err);
               // Clear loading on error after a delay
-              if (attempt >= 2) {
+              if (attempt >= 3) {
                 setLoading(prev => ({ ...prev, [service]: false }));
+              } else {
+                // Retry on error
+                setTimeout(() => refreshStatus(attempt + 1), 500);
               }
             });
         };
         
-        // Start refreshing status
-        refreshStatus(0);
+        // Start refreshing status immediately (first check after 200ms)
+        setTimeout(() => refreshStatus(0), 200);
       } else {
         const errorMsg = data.message || data.error || 'Failed to stop service';
         setError(errorMsg);
@@ -374,19 +385,19 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
   };
 
   return (
-    <div className="bg-dark-panel p-4 rounded-lg border border-dark-border mb-6">
-      <h3 className="text-white text-lg font-semibold mb-4">Service Controls</h3>
+    <div className="bg-dark-panel p-3 rounded-lg border border-dark-border mb-6">
+      <h3 className="heading-inter heading-inter-sm mb-3">Service Controls</h3>
       
       {error && (
-        <div className="bg-red-900/50 border border-red-500 text-red-200 px-3 py-2 rounded mb-4 text-sm">
+        <div className="bg-red-900/50 border border-red-500 text-red-200 px-3 py-2 rounded mb-3 text-sm">
           {error}
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {/* Step 1: InfluxDB Writer */}
-        <div className="p-3 bg-dark-bg/50 rounded border border-dark-border">
-          <div className="flex items-center justify-between mb-2">
+        <div className="p-2 bg-dark-bg/50 rounded border border-dark-border">
+          <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-3">
               <span className="text-white font-medium">Step 1: InfluxDB Writer</span>
               <div className={`w-3 h-3 rounded-full ${influxdbRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
@@ -462,7 +473,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
 
         {/* Step 2: Mock PLC for current machine - Only show when Writer is running */}
         {influxdbRunning && (
-          <div className="flex items-center justify-between p-3 bg-dark-bg/50 rounded border border-dark-border">
+          <div className="flex items-center justify-between p-2 bg-dark-bg/50 rounded border border-dark-border">
             <div className="flex items-center gap-3">
               <span className="text-white font-medium">Step 2: Mock PLC ({machineId})</span>
               <div className={`w-3 h-3 rounded-full ${machineRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
@@ -471,15 +482,14 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {!machineRunning ? (
+              {!machineRunning && !loading.mock_plc ? (
                 <button
                   onClick={() => startService('mock_plc')}
-                  disabled={loading.mock_plc}
-                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-green-500/50"
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-green-500/50"
                 >
-                  {loading.mock_plc ? '⏳ Starting Agent...' : '▶ Start Agent'}
+                  ▶ Start Agent
                 </button>
-              ) : (
+              ) : machineRunning ? (
                 <button
                   onClick={() => stopService('mock_plc')}
                   disabled={loading.mock_plc}
@@ -487,14 +497,21 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                 >
                   {loading.mock_plc ? '⏳ Stopping Agent...' : '⏹ Stop Agent'}
                 </button>
-              )}
+              ) : loading.mock_plc ? (
+                <button
+                  disabled
+                  className="bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium"
+                >
+                  ⏳ Starting Agent...
+                </button>
+              ) : null}
             </div>
           </div>
         )}
 
         {/* Message when Writer is not running */}
         {!influxdbRunning && (
-          <div className="p-3 bg-dark-bg/30 rounded border border-dark-border border-dashed">
+          <div className="p-2 bg-dark-bg/30 rounded border border-dark-border border-dashed">
             <p className="text-gray-400 text-sm text-center">
               ⚠️ Start InfluxDB Writer first to enable Mock PLC agent controls
             </p>
@@ -502,7 +519,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         )}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-dark-border">
+      <div className="mt-3 pt-3 border-t border-dark-border">
         <p className="text-gray-500 text-xs">
           💡 Start InfluxDB Writer first, then start Mock PLC for the selected machine.
         </p>

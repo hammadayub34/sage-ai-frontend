@@ -217,7 +217,7 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
             className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
             onClick={() => setIsExpanded(!isExpanded)}
           >
-            <span className="text-white text-lg font-semibold">Alarm Events (Real-time)</span>
+            <span className="heading-inter heading-inter-sm">Alarm Events (Real-time)</span>
             <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
             <span className={`text-xs ml-2 ${getConnectionStatusColor()}`}>
               {getConnectionStatusText()}

@@ -30,7 +30,12 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      // Check if this is a lathe machine (starts with "lathe")
+      if (machineId.startsWith('lathe')) {
+        return await stopLatheSim(machineId);
+      } else {
       return await stopMockPLC(machineId);
+      }
     } else {
       return NextResponse.json(
         { error: 'Invalid service. Use "influxdb_writer" or "mock_plc"' },
@@ -112,6 +117,57 @@ async function stopMockPLC(machineId: string) {
     return NextResponse.json({
       success: true,
       message: `Mock PLC for ${machineId} stopped (or was not running)`,
+    });
+  }
+}
+
+async function stopLatheSim(latheMachineId: string) {
+  try {
+    // First, find the PID by checking environment variables (same method as status endpoint)
+    const { stdout: pids } = await execAsync(`pgrep -f "lathe_sim.py"`).catch(() => {
+      return { stdout: '' };
+    });
+    
+    if (!pids.trim()) {
+      return NextResponse.json({
+        success: true,
+        message: `Lathe simulator for ${latheMachineId} stopped (or was not running)`,
+      });
+    }
+    
+    // Check each PID's environment for LATHE_MACHINE_ID
+    const pidList = pids.trim().split('\n');
+    for (const pid of pidList) {
+      try {
+        // Check if this process has the matching LATHE_MACHINE_ID in its environment
+        const { stdout: env } = await execAsync(`ps e -p ${pid} 2>/dev/null | tr ' ' '\\n' | grep "^LATHE_MACHINE_ID=" || echo ""`).catch(() => {
+          return { stdout: '' };
+        });
+        if (env.includes(`LATHE_MACHINE_ID=${latheMachineId}`)) {
+          // Found the matching process, kill it
+          await execAsync(`kill ${pid}`).catch(() => {
+            // Process might have exited, continue
+          });
+          return NextResponse.json({
+            success: true,
+            message: `Lathe simulator for ${latheMachineId} stopped`,
+          });
+        }
+      } catch {
+        // Process might have exited, continue
+      }
+    }
+    
+    // No matching process found
+    return NextResponse.json({
+      success: true,
+      message: `Lathe simulator for ${latheMachineId} stopped (or was not running)`,
+    });
+  } catch (error: any) {
+    // Even if kill fails, assume it's stopped
+    return NextResponse.json({
+      success: true,
+      message: `Lathe simulator for ${latheMachineId} stopped (or was not running)`,
     });
   }
 }
