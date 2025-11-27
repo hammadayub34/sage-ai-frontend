@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { DashboardIcon, ChatIcon } from './Icons';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -10,12 +11,12 @@ export function Sidebar() {
     {
       name: 'Dashboard',
       href: '/',
-      icon: '📊',
+      icon: <DashboardIcon className="w-6 h-6" />,
     },
     {
       name: 'Chat Assistant',
       href: '/chat',
-      icon: '💬',
+      icon: <ChatIcon className="w-6 h-6" />,
     },
   ];
 
@@ -37,7 +38,11 @@ export function Sidebar() {
                   }`}
                   title={item.name}
                 >
-                  <span className="text-2xl">{item.icon}</span>
+                  {typeof item.icon === 'string' ? (
+                    <span className="text-2xl">{item.icon}</span>
+                  ) : (
+                    item.icon
+                  )}
                 </Link>
               </li>
             );

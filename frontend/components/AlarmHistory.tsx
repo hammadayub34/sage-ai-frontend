@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ChevronDownIcon, ChevronRightIcon, CheckIcon, WarningIcon } from './Icons';
 import { useQuery } from '@tanstack/react-query';
 import { queryAlarmHistory } from '@/lib/influxdb';
 
@@ -32,7 +33,7 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <h3 className="heading-inter heading-inter-sm">Alarm History (Last 24h)</h3>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && <div className="text-gray-400">Loading...</div>}
       </div>
@@ -47,7 +48,7 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <h3 className="heading-inter heading-inter-sm">Alarm History (Last 24h)</h3>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && <div className="text-red-400">Error loading alarm history</div>}
       </div>
@@ -79,7 +80,7 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
       >
         <div className="flex items-center gap-2">
           <span className="heading-inter heading-inter-sm">Alarm History (Last 24h)</span>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {totalAlarms > 0 && (
           <span className="bg-red-500/20 text-red-400 px-3 py-1 rounded text-sm font-medium border border-red-500/50">
@@ -98,7 +99,7 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
                   <div className="flex items-center gap-3">
                     <span className="text-dark-text font-medium">{alarm.label}</span>
                     {count > 0 && (
-                      <span className="text-red-400 text-xs">⚠️</span>
+                      <WarningIcon className="w-3 h-3 text-red-400" />
                     )}
                   </div>
                   <div className="flex items-center gap-3">
@@ -114,7 +115,10 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           
           {totalAlarms === 0 && (
             <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded text-center">
-              <span className="text-green-400 text-sm">✅ No alarms triggered in last 24 hours</span>
+              <span className="text-green-400 text-sm flex items-center gap-1.5">
+                <CheckIcon className="w-4 h-4" />
+                No alarms triggered in last 24 hours
+              </span>
             </div>
           )}
         </>

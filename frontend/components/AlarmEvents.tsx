@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, WarningIcon } from './Icons';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AlarmInstructions } from './AlarmInstructions';
@@ -218,7 +219,7 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
             onClick={() => setIsExpanded(!isExpanded)}
           >
             <span className="heading-inter heading-inter-sm">Alarm Events (Real-time)</span>
-            <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+            {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
             <span className={`text-xs ml-2 ${getConnectionStatusColor()}`}>
               {getConnectionStatusText()}
             </span>
@@ -237,7 +238,10 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
             {connectionStatus === 'error' && (
               <div className="p-4 bg-red-500/10 border border-red-500/30 rounded text-center mb-4">
                 <span className="text-red-400 text-sm">
-                  ⚠️ WebSocket connection error. Make sure the Alarm Monitor is running.
+                  <span className="flex items-center gap-1.5 justify-center">
+                    <WarningIcon className="w-4 h-4" />
+                    WebSocket connection error. Make sure the Alarm Monitor is running.
+                  </span>
                 </span>
                 <p className="text-gray-500 text-xs mt-2">
                   Run: <code className="bg-midnight-200 px-2 py-1 rounded">./start_alarm_monitor.sh</code>
@@ -247,7 +251,10 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
             
             {connectionStatus === 'connecting' && (
               <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded text-center mb-4">
-                <span className="text-yellow-400 text-sm">⏳ Connecting to WebSocket server...</span>
+                <span className="text-yellow-400 text-sm flex items-center gap-1.5">
+                  <ClockIcon className="w-4 h-4" />
+                  Connecting to WebSocket server...
+                </span>
               </div>
             )}
             
@@ -261,7 +268,12 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
               <div className="p-4 bg-green-500/10 border border-green-500/30 rounded text-center">
                 <span className="text-green-400 text-sm">
                   {connectionStatus === 'connected' 
-                    ? `✅ No alarm events for ${machineId}...` 
+                    ? (
+                      <span className="flex items-center gap-1.5 justify-center">
+                        <CheckIcon className="w-4 h-4" />
+                        No alarm events for {machineId}...
+                      </span>
+                    )
                     : 'No alarm events yet'}
                 </span>
                 <p className="text-gray-500 text-xs mt-2">
@@ -288,11 +300,11 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1">
-                          <span className={`text-xs font-bold ${
-                            event.state === 'RAISED' ? 'text-red-400' : 'text-green-400'
-                          }`}>
-                            {event.state === 'RAISED' ? '🚨' : '✅'}
-                          </span>
+                          {event.state === 'RAISED' ? (
+                            <AlertIcon className="w-4 h-4 text-red-400" />
+                          ) : (
+                            <CheckIcon className="w-4 h-4 text-green-400" />
+                          )}
                           <div className="flex-1">
                             <div className="text-dark-text font-medium">{event.alarm_type}</div>
                             <div className="text-gray-500 text-xs">{formatTime(event.timestamp)}</div>

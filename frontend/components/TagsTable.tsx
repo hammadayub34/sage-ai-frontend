@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { usePLCData } from '@/hooks/usePLCData';
 import { PLCData } from '@/types/plc-data';
+import { SettingsIcon, ChartIcon, TrendingUpIcon, LockIcon, WrenchIcon, DropletIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, WarningIcon } from './Icons';
 
 interface TagsTableProps {
   machineId?: string;
@@ -36,7 +37,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <h3 className="heading-inter heading-inter-sm">All Tag Values</h3>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && <div className="text-gray-400">Loading...</div>}
       </div>
@@ -51,7 +52,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <h3 className="heading-inter heading-inter-sm">All Tag Values</h3>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && <div className="text-red-400">Error loading data</div>}
       </div>
@@ -69,11 +70,14 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <h3 className="heading-inter heading-inter-sm">All Tag Values</h3>
-          <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+          {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && (
         <div className="text-yellow-400 p-4 text-center">
-          ⚠️ No data available for {machineId}
+          <span className="flex items-center gap-1.5 justify-center">
+            <WarningIcon className="w-4 h-4" />
+            No data available for {machineId}
+          </span>
           <br />
           <span className="text-gray-500 text-sm mt-2 block">
             To see data for this machine, run:
@@ -218,7 +222,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <h3 className="text-white text-lg font-semibold">All Tag Values</h3>
-        <span className="text-xs text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+        {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
       </div>
 
       {isExpanded && (
@@ -227,7 +231,7 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
         {data._time && (
           <div className="bg-midnight-200/30 border border-dark-border rounded-lg p-3">
             <div className="flex items-center gap-2 text-gray-400 text-sm">
-              <span>📅</span>
+              <CalendarIcon className="w-4 h-4" />
               <span>Last updated: {formatESTTime(data._time)}</span>
             </div>
           </div>
@@ -240,10 +244,10 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
             onClick={() => toggleSection('status')}
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg">⚙️</span>
+              <SettingsIcon className="w-5 h-5 text-gray-300" />
               <span className="text-gray-300 heading-inter heading-inter-sm">Status Fields</span>
             </div>
-            <span className="text-gray-500 text-sm">{expandedSections.status ? '▼' : '▶'}</span>
+            {expandedSections.status ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
           </div>
           {expandedSections.status && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -274,10 +278,10 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
             onClick={() => toggleSection('counter')}
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg">📊</span>
+              <ChartIcon className="w-5 h-5 text-gray-300" />
               <span className="text-gray-300 heading-inter heading-inter-sm">Counter Fields</span>
             </div>
-            <span className="text-gray-500 text-sm">{expandedSections.counter ? '▼' : '▶'}</span>
+            {expandedSections.counter ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
           </div>
           {expandedSections.counter && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -303,10 +307,10 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
             onClick={() => toggleSection('analog')}
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg">📈</span>
+              <TrendingUpIcon className="w-5 h-5 text-gray-300" />
               <span className="text-gray-300 heading-inter heading-inter-sm">Analog Fields</span>
             </div>
-            <span className="text-gray-500 text-sm">{expandedSections.analog ? '▼' : '▶'}</span>
+            {expandedSections.analog ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
           </div>
           {expandedSections.analog && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -332,10 +336,10 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
             onClick={() => toggleSection('input')}
           >
             <div className="flex items-center gap-2">
-              <span className="text-lg">🔒</span>
+              <LockIcon className="w-5 h-5 text-gray-300" />
               <span className="text-gray-300 heading-inter heading-inter-sm">{isLathe ? 'Safety Fields' : 'Input Fields'}</span>
             </div>
-            <span className="text-gray-500 text-sm">{expandedSections.input ? '▼' : '▶'}</span>
+            {expandedSections.input ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
           </div>
           {expandedSections.input && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -367,10 +371,10 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
               onClick={() => toggleSection('tooling')}
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">🔧</span>
+                <WrenchIcon className="w-5 h-5 text-gray-300" />
                 <span className="text-gray-300 heading-inter heading-inter-sm">Tooling Fields</span>
               </div>
-              <span className="text-gray-500 text-sm">{expandedSections.tooling ? '▼' : '▶'}</span>
+              {expandedSections.tooling ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
             </div>
             {expandedSections.tooling && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -398,10 +402,10 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
               onClick={() => toggleSection('coolant')}
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">💧</span>
+                <DropletIcon className="w-5 h-5 text-gray-300" />
                 <span className="text-gray-300 heading-inter heading-inter-sm">Coolant Fields</span>
               </div>
-              <span className="text-gray-500 text-sm">{expandedSections.coolant ? '▼' : '▶'}</span>
+              {expandedSections.coolant ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
             </div>
             {expandedSections.coolant && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">

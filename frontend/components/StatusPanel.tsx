@@ -1,6 +1,7 @@
 'use client';
 
 import { usePLCData } from '@/hooks/usePLCData';
+import { WarningIcon } from './Icons';
 
 interface StatusPanelProps {
   machineId?: string;
@@ -37,7 +38,10 @@ export function StatusPanel({ machineId = 'machine-01' }: StatusPanelProps) {
       <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
         <h3 className="heading-inter heading-inter-sm mb-4">System Status</h3>
         <div className="text-yellow-400 text-sm">
-          ⚠️ No data available
+          <span className="flex items-center gap-1.5">
+            <WarningIcon className="w-4 h-4" />
+            No data available
+          </span>
         </div>
       </div>
     );

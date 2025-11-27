@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { AlertIcon, WrenchIcon, CheckIcon, ChartIcon, SearchIcon, WarningIcon, FileIcon } from './Icons';
 
 function formatInstructions(text: string) {
   const lines = text.split('\n');
@@ -75,13 +76,13 @@ function formatInstructions(text: string) {
           <h4 className={`${isMainSection ? 'heading-inter-sm' : 'heading-inter heading-inter-sm'} flex items-center gap-2`}>
             {isMainSection && (
               <span className="text-midnight-300">
-                {headerText.includes('IMMEDIATE') ? '🚨' : 
-                 headerText.includes('TROUBLESHOOTING') ? '🔧' :
-                 headerText.includes('RESOLUTION') ? '✅' :
-                 headerText.includes('VERIFICATION') ? '✔️' :
-                 headerText.includes('STATUS') ? '📊' :
-                 headerText.includes('POST-RESOLUTION') ? '🔍' :
-                 headerText.includes('IMPORTANT') ? '⚠️' : '📋'}
+                {headerText.includes('IMMEDIATE') ? <AlertIcon className="w-4 h-4" /> : 
+                 headerText.includes('TROUBLESHOOTING') ? <WrenchIcon className="w-4 h-4" /> :
+                 headerText.includes('RESOLUTION') ? <CheckIcon className="w-4 h-4" /> :
+                 headerText.includes('VERIFICATION') ? <CheckIcon className="w-4 h-4" /> :
+                 headerText.includes('STATUS') ? <ChartIcon className="w-4 h-4" /> :
+                 headerText.includes('POST-RESOLUTION') ? <SearchIcon className="w-4 h-4" /> :
+                 headerText.includes('IMPORTANT') ? <WarningIcon className="w-4 h-4" /> : <FileIcon className="w-4 h-4" />}
               </span>
             )}
             {headerText}
@@ -244,12 +245,12 @@ export function AlarmInstructions({
           <h3 className="heading-inter heading-inter-md flex items-center gap-2">
             {state === 'RAISED' ? (
               <>
-                <span className="text-red-400">🚨</span>
+                <AlertIcon className="w-5 h-5 text-red-400" />
                 <span>Alarm Response Instructions</span>
               </>
             ) : (
               <>
-                <span className="text-green-400">✅</span>
+                <CheckIcon className="w-5 h-5 text-green-400" />
                 <span>Issue Resolved</span>
               </>
             )}

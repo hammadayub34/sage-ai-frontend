@@ -1,6 +1,7 @@
 'use client';
 
 import { useTimeSeries } from '@/hooks/usePLCData';
+import { RefreshIcon } from './Icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface TimeSeriesChartProps {
@@ -59,7 +60,7 @@ export function TimeSeriesChart({
               <li>InfluxDB is running</li>
               <li>Data is being written to InfluxDB</li>
               <li>The mock PLC agent is publishing data</li>
-              <li>Click "🔄 Refresh Data" after starting services</li>
+              <li>Click <span className="inline-flex items-center gap-1"><RefreshIcon className="w-3 h-3" /> Refresh Data</span> after starting services</li>
             </ul>
           </div>
         </div>

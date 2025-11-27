@@ -1,6 +1,7 @@
 'use client';
 
 import { usePLCData } from '@/hooks/usePLCData';
+import { WarningIcon, CheckIcon } from './Icons';
 
 interface AlarmsPanelProps {
   machineId?: string;
@@ -66,7 +67,19 @@ function AlarmItem({ label, active }: { label: string; active: boolean }) {
       <span className="text-dark-text text-sm">{label}</span>
       <div className="flex items-center gap-2">
         <span className={`text-sm ${active ? 'text-red-400' : 'text-green-400'}`}>
-          {active ? '⚠️ ACTIVE' : '✓ OK'}
+          <span className="flex items-center gap-1">
+            {active ? (
+              <>
+                <WarningIcon className="w-3 h-3" />
+                ACTIVE
+              </>
+            ) : (
+              <>
+                <CheckIcon className="w-3 h-3" />
+                OK
+              </>
+            )}
+          </span>
         </span>
         <div className={`w-2 h-2 rounded-full ${active ? 'bg-red-500' : 'bg-green-500'}`} />
       </div>

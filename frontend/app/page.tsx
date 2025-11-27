@@ -5,6 +5,7 @@ import { ServiceControls } from '@/components/ServiceControls';
 import { TimeSeriesChart } from '@/components/TimeSeriesChart';
 import { AlarmHistory } from '@/components/AlarmHistory';
 import { AlarmEvents } from '@/components/AlarmEvents';
+import { RefreshIcon } from '@/components/Icons';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -68,7 +69,10 @@ export default function Dashboard() {
             onClick={handleRefresh}
             className="bg-midnight-300 hover:bg-midnight-400 text-dark-text border border-dark-border px-4 py-1 rounded text-sm font-medium transition-colors"
           >
-            🔄 Refresh Data
+            <span className="flex items-center gap-1.5">
+              <RefreshIcon className="w-4 h-4" />
+              Refresh Data
+            </span>
           </button>
           <span className="text-gray-500 text-sm">
             Click refresh to update data

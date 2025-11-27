@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { PlayIcon, StopIcon, ClockIcon, FileIcon, WarningIcon } from './Icons';
 
 interface ServiceStatus {
   influxdbWriter: { running: boolean };
@@ -412,14 +413,20 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                   disabled={loading.influxdb_writer}
                   className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-green-500/50"
                 >
-                  ▶ Start Writer
+                  <span className="flex items-center gap-1.5">
+                    <PlayIcon className="w-4 h-4" />
+                    Start Writer
+                  </span>
                 </button>
               ) : loading.influxdb_writer && !influxdbRunning ? (
                 <button
                   disabled
                   className="bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium"
                 >
-                  ⏳ Starting Writer...
+                  <span className="flex items-center gap-1.5">
+                    <ClockIcon className="w-4 h-4" />
+                    Starting Writer...
+                  </span>
                 </button>
               ) : influxdbRunning ? (
                 <>
@@ -434,14 +441,20 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                     }}
                     className="bg-midnight-300 hover:bg-midnight-400 text-dark-text border border-dark-border px-4 py-2 rounded text-sm font-medium transition-colors"
                   >
-                    {showLogs.influxdb_writer ? '📋 Hide Logs' : '📋 Show Logs'}
+                    <span className="flex items-center gap-1.5">
+                      <FileIcon className="w-4 h-4" />
+                      {showLogs.influxdb_writer ? 'Hide Logs' : 'Show Logs'}
+                    </span>
                   </button>
                   <button
                     onClick={() => stopService('influxdb_writer')}
                     disabled={loading.influxdb_writer}
                     className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-red-500/50"
                   >
-                    ⏹ Stop Writer
+                    <span className="flex items-center gap-1.5">
+                      <StopIcon className="w-4 h-4" />
+                      Stop Writer
+                    </span>
                   </button>
                 </>
               ) : null}
@@ -487,7 +500,10 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                   onClick={() => startService('mock_plc')}
                   className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-green-500/50"
                 >
-                  ▶ Start Agent
+                  <span className="flex items-center gap-1.5">
+                    <PlayIcon className="w-4 h-4" />
+                    Start Agent
+                  </span>
                 </button>
               ) : machineRunning ? (
                 <button
@@ -495,14 +511,29 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                   disabled={loading.mock_plc}
                   className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-red-500/50"
                 >
-                  {loading.mock_plc ? '⏳ Stopping Agent...' : '⏹ Stop Agent'}
+                  <span className="flex items-center gap-1.5">
+                    {loading.mock_plc ? (
+                      <>
+                        <ClockIcon className="w-4 h-4" />
+                        Stopping Agent...
+                      </>
+                    ) : (
+                      <>
+                        <StopIcon className="w-4 h-4" />
+                        Stop Agent
+                      </>
+                    )}
+                  </span>
                 </button>
               ) : loading.mock_plc ? (
                 <button
                   disabled
                   className="bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium"
                 >
-                  ⏳ Starting Agent...
+                  <span className="flex items-center gap-1.5">
+                    <ClockIcon className="w-4 h-4" />
+                    Starting Agent...
+                  </span>
                 </button>
               ) : null}
             </div>
@@ -513,7 +544,10 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
         {!influxdbRunning && (
           <div className="p-2 bg-dark-bg/30 rounded border border-dark-border border-dashed">
             <p className="text-gray-400 text-sm text-center">
-              ⚠️ Start InfluxDB Writer first to enable Mock PLC agent controls
+              <span className="flex items-center gap-1.5 justify-center">
+                <WarningIcon className="w-4 h-4" />
+                Start InfluxDB Writer first to enable Mock PLC agent controls
+              </span>
             </p>
           </div>
         )}

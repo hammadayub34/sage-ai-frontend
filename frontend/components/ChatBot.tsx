@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ChatIcon } from './Icons';
 
 interface ChatBotProps {
   isMinimized: boolean;
@@ -39,7 +40,7 @@ export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
           className="bg-dark-panel border border-dark-border border-r-0 rounded-l-lg px-3 py-4 hover:bg-dark-border transition-colors"
           title="Open Chat Assistant"
         >
-          <span className="text-xl">💬</span>
+          <ChatIcon className="w-5 h-5" />
         </button>
       </div>
     );
