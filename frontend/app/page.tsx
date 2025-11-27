@@ -5,6 +5,7 @@ import { ServiceControls } from '@/components/ServiceControls';
 import { TimeSeriesChart } from '@/components/TimeSeriesChart';
 import { AlarmHistory } from '@/components/AlarmHistory';
 import { AlarmEvents } from '@/components/AlarmEvents';
+import { DowntimeStats } from '@/components/DowntimeStats';
 import { RefreshIcon } from '@/components/Icons';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -44,39 +45,36 @@ export default function Dashboard() {
         <ServiceControls machineId={machineId} />
         
         {/* Machine Type and Selection */}
-        <div className="flex items-center gap-4 mt-4">
-          <label className="text-gray-400">Machine Type:</label>
-          <select
-            value={machineType}
-            onChange={handleMachineTypeChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white"
-          >
-            <option value="bottlefiller">Bottle Filler</option>
-            <option value="lathe">CNC Lathe</option>
-          </select>
-          
-          <label className="text-gray-400">Machine ID:</label>
-          <select
-            value={machineId}
-            onChange={handleMachineChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white"
-          >
-            {machineOptions.map(id => (
-              <option key={id} value={id}>{id}</option>
-            ))}
-          </select>
+        <div className="flex items-center justify-between gap-4 mt-4">
+          <div className="flex items-center gap-4">
+            <label className="text-gray-400">Machine Type:</label>
+            <select
+              value={machineType}
+              onChange={handleMachineTypeChange}
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white"
+            >
+              <option value="bottlefiller">Bottle Filler</option>
+              <option value="lathe">CNC Lathe</option>
+            </select>
+            
+            <label className="text-gray-400">Machine ID:</label>
+            <select
+              value={machineId}
+              onChange={handleMachineChange}
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white"
+            >
+              {machineOptions.map(id => (
+                <option key={id} value={id}>{id}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={handleRefresh}
-            className="bg-midnight-300 hover:bg-midnight-400 text-dark-text border border-dark-border px-4 py-1 rounded text-sm font-medium transition-colors"
+            className="bg-midnight-300 hover:bg-midnight-400 text-dark-text border border-dark-border p-2 rounded transition-colors flex items-center justify-center"
+            title="Refresh Data"
           >
-            <span className="flex items-center gap-1.5">
-              <RefreshIcon className="w-4 h-4" />
-              Refresh Data
-            </span>
+            <RefreshIcon className="w-4 h-4" />
           </button>
-          <span className="text-gray-500 text-sm">
-            Click refresh to update data
-          </span>
         </div>
       </div>
 
@@ -91,6 +89,11 @@ export default function Dashboard() {
           timeRange="-24h"
           machineType={machineType}
         />
+      </div>
+
+      {/* Downtime Statistics */}
+      <div className="mb-6">
+        <DowntimeStats machineId={machineId} timeRange="-24h" machineType={machineType} />
       </div>
 
       {/* Alarm History */}

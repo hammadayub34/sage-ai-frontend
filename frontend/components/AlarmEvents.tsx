@@ -5,6 +5,7 @@ import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, War
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AlarmInstructions } from './AlarmInstructions';
+import { formatAlarmName } from '@/lib/utils';
 
 interface AlarmEvent {
   timestamp: string;
@@ -63,14 +64,15 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
         if (!machineId || alarm.machine_id === machineId) {
           console.log('   ✅ Processing alarm (matches machine filter)');
           const alarmLabel = alarm.alarm_name || alarm.alarm_type;
-          const message = `${alarmLabel} on ${alarm.machine_id}`;
+          const formattedAlarmName = formatAlarmName(alarmLabel);
+          const message = `${formattedAlarmName} on ${alarm.machine_id}`;
           
           // Only show toast notification when alarm is RAISED (goes true)
           if (alarm.state === 'RAISED') {
             toast.error(
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30">
-                  <AlertIcon className="w-5 h-5 text-red-400" />
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center mt-0.5">
+                  <span className="text-red-400 font-bold text-xl leading-none">!</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-white font-semibold text-sm mb-0.5">Alarm Raised</div>
@@ -84,6 +86,7 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
                 hideProgressBar: false,
                 closeOnClick: true,
                 pauseOnHover: true,
+                icon: false,
                 className: 'custom-toast',
                 bodyClassName: 'custom-toast-body',
               }
@@ -282,13 +285,13 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
             )}
 
             {filteredEvents.length === 0 ? (
-              <div className="p-4 bg-sage-500/10 border border-sage-500/30 rounded text-center">
-                <span className="text-sage-400 text-sm">
+              <div className="p-4 bg-gray-800/30 border border-dark-border rounded text-center">
+                <span className="text-gray-400 text-sm">
                   {connectionStatus === 'connected' 
                     ? (
                       <span className="flex items-center gap-1.5 justify-center">
                         <CheckIcon className="w-4 h-4" />
-                        No alarm events for {machineId}...
+                        No alarm events for {machineId} -
                       </span>
                     )
                     : 'No alarm events yet'}
@@ -323,7 +326,7 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
                             <CheckIcon className="w-4 h-4 text-sage-400" />
                           )}
                           <div className="flex-1">
-                            <div className="text-dark-text font-medium">{event.alarm_type}</div>
+                            <div className="text-dark-text font-medium">{formatAlarmName(event.alarm_type)}</div>
                             <div className="text-gray-500 text-xs">{formatTime(event.timestamp)}</div>
                           </div>
                         </div>

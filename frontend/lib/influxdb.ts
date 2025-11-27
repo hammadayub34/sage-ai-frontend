@@ -269,3 +269,155 @@ export async function queryAlarmHistory(
   return alarmCounts;
 }
 
+/**
+ * Downtime period interface
+ */
+export interface DowntimePeriod {
+  startTime: string;
+  endTime: string | null; // null if still down
+  duration: number; // in seconds
+}
+
+/**
+ * Downtime statistics
+ */
+export interface DowntimeStats {
+  totalDowntime: number; // total seconds
+  totalDowntimeFormatted: string; // formatted as "Xh Ym Zs"
+  incidentCount: number;
+  averageDowntime: number; // average seconds per incident
+  averageDowntimeFormatted: string;
+  periods: DowntimePeriod[];
+  uptimePercentage: number; // percentage of time machine was up
+}
+
+/**
+ * Query downtime statistics for a machine
+ * Calculates periods where SystemRunning = false OR Fault = true
+ */
+export async function queryDowntime(
+  machineId: string = 'machine-01',
+  timeRange: string = '-24h',
+  machineType?: string
+): Promise<DowntimeStats> {
+  const machineTypeFilter = machineType 
+    ? `|> filter(fn: (r) => r["machine_type"] == "${machineType}")`
+    : '';
+
+  // Query both SystemRunning and Fault fields
+  const fluxQuery = `
+    from(bucket: "${INFLUXDB_BUCKET}")
+      |> range(start: ${timeRange})
+      |> filter(fn: (r) => r["machine_id"] == "${machineId}")
+      ${machineTypeFilter}
+      |> filter(fn: (r) => r["_field"] == "SystemRunning" or r["_field"] == "Fault")
+      |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"])
+      |> map(fn: (r) => ({
+          r with
+          isDown: if exists r.SystemRunning and exists r.Fault then
+            (if r.SystemRunning == false or r.Fault == true then 1 else 0)
+          else if exists r.SystemRunning then
+            (if r.SystemRunning == false then 1 else 0)
+          else if exists r.Fault then
+            (if r.Fault == true then 1 else 0)
+          else 0
+        }))
+      |> filter(fn: (r) => exists r.isDown)
+  `;
+
+  const results = await executeQuery(fluxQuery);
+  
+  // Process results to find downtime periods
+  const periods: DowntimePeriod[] = [];
+  let currentPeriodStart: string | null = null;
+  let prevIsDown = false;
+  let totalDowntime = 0;
+  
+  // Get the time range to calculate total time
+  const rangeMatch = timeRange.match(/-(\d+)([hdms])/);
+  let totalTimeSeconds = 24 * 3600; // default 24h
+  if (rangeMatch) {
+    const value = parseInt(rangeMatch[1]);
+    const unit = rangeMatch[2];
+    if (unit === 'h') totalTimeSeconds = value * 3600;
+    else if (unit === 'd') totalTimeSeconds = value * 24 * 3600;
+    else if (unit === 'm') totalTimeSeconds = value * 60;
+    else if (unit === 's') totalTimeSeconds = value;
+  }
+  
+  for (const record of results) {
+    const time = record._time as string;
+    const isDown = (record.isDown as number) === 1;
+    
+    // Detect transition from up to down
+    if (!prevIsDown && isDown) {
+      currentPeriodStart = time;
+    }
+    
+    // Detect transition from down to up
+    if (prevIsDown && !isDown && currentPeriodStart) {
+      const startTime = new Date(currentPeriodStart).getTime();
+      const endTime = new Date(time).getTime();
+      const duration = (endTime - startTime) / 1000; // seconds
+      
+      periods.push({
+        startTime: currentPeriodStart,
+        endTime: time,
+        duration,
+      });
+      
+      totalDowntime += duration;
+      currentPeriodStart = null;
+    }
+    
+    prevIsDown = isDown;
+  }
+  
+  // Handle case where machine is still down at the end
+  if (currentPeriodStart) {
+    const startTime = new Date(currentPeriodStart).getTime();
+    const endTime = Date.now();
+    const duration = (endTime - startTime) / 1000; // seconds
+    
+    periods.push({
+      startTime: currentPeriodStart,
+      endTime: null,
+      duration,
+    });
+    
+    totalDowntime += duration;
+  }
+  
+  const incidentCount = periods.length;
+  const averageDowntime = incidentCount > 0 ? totalDowntime / incidentCount : 0;
+  const uptimePercentage = totalTimeSeconds > 0 
+    ? ((totalTimeSeconds - totalDowntime) / totalTimeSeconds) * 100 
+    : 100;
+  
+  // Format duration helper
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  };
+  
+  return {
+    totalDowntime,
+    totalDowntimeFormatted: formatDuration(totalDowntime),
+    incidentCount,
+    averageDowntime,
+    averageDowntimeFormatted: formatDuration(averageDowntime),
+    periods: periods.slice(0, 10), // Limit to last 10 periods
+    uptimePercentage: Math.max(0, Math.min(100, uptimePercentage)),
+  };
+}
+

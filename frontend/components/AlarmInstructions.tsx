@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AlertIcon, WrenchIcon, CheckIcon, ChartIcon, SearchIcon, WarningIcon, FileIcon } from './Icons';
+import { formatAlarmName } from '@/lib/utils';
 
 function formatInstructions(text: string) {
   const lines = text.split('\n');
@@ -257,7 +258,7 @@ export function AlarmInstructions({
           </h3>
           <div className="flex items-center gap-3 mt-2">
             <span className="text-gray-400 text-sm">
-              <span className="font-semibold text-gray-300">Alarm:</span> {alarmType}
+              <span className="font-semibold text-gray-300">Alarm:</span> {formatAlarmName(alarmType)}
             </span>
             <span className="text-gray-500">•</span>
             <span className="text-gray-400 text-sm">
