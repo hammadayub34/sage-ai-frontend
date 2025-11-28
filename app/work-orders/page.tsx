@@ -78,13 +78,21 @@ export default function WorkOrdersPage() {
 
       const response = await fetch(`/api/work-orders?${params.toString()}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch work orders');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to fetch work orders:', response.status, errorData);
+        throw new Error(errorData.error || 'Failed to fetch work orders');
       }
 
       const data = await response.json();
+      console.log('Work orders fetched:', data.data?.length || 0, 'orders');
       setWorkOrders(data.data || []);
+      
+      if (!data.data || data.data.length === 0) {
+        console.warn('No work orders found in response');
+      }
     } catch (error) {
       console.error('Error fetching work orders:', error);
+      toast.error('Failed to load work orders. Please check the console for details.');
     } finally {
       setLoading(false);
     }

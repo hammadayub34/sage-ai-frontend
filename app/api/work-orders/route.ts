@@ -51,16 +51,44 @@ export async function GET(request: NextRequest) {
     fluxQuery += `
       |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"], desc: true)
-      |> limit(n: 100)
+      |> limit(n: 1000)
     `;
 
     const results: any[] = [];
+    const workOrderMap = new Map<string, any>();
 
     return new Promise<NextResponse>((resolve) => {
       queryApi.queryRows(fluxQuery, {
         next(row, tableMeta) {
           const record = tableMeta.toObject(row);
-          results.push(record);
+          const workOrderNo = record.workOrderNo || '';
+          
+          // Debug logging
+          if (workOrderMap.size < 2) {
+            console.log('[WorkOrders API] Sample record:', {
+              workOrderNo,
+              hasFields: Object.keys(record).length,
+              sampleFields: Object.keys(record).slice(0, 10),
+            });
+          }
+          
+          // Group by workOrderNo to handle any duplicates from pivot
+          if (workOrderNo) {
+            if (!workOrderMap.has(workOrderNo)) {
+              workOrderMap.set(workOrderNo, record);
+            } else {
+              // Merge fields if duplicate (take the most recent one based on _time)
+              const existing = workOrderMap.get(workOrderNo);
+              const existingTime = new Date(existing._time || 0).getTime();
+              const newTime = new Date(record._time || 0).getTime();
+              if (newTime > existingTime) {
+                workOrderMap.set(workOrderNo, record);
+              }
+            }
+          } else {
+            // If no workOrderNo, just add it (shouldn't happen, but handle it)
+            results.push(record);
+          }
         },
         error(error) {
           console.error('[WorkOrders API] InfluxDB query error:', error);
@@ -77,9 +105,11 @@ export async function GET(request: NextRequest) {
           );
         },
         complete() {
-          console.log(`[WorkOrders API] Query complete. Found ${results.length} records`);
+          // Convert map to array
+          const uniqueResults = Array.from(workOrderMap.values()).concat(results);
+          console.log(`[WorkOrders API] Query complete. Found ${uniqueResults.length} unique work orders`);
           // Transform results into work order objects
-          const workOrders = results.map(record => ({
+          const workOrders = uniqueResults.map(record => ({
             workOrderNo: record.workOrderNo || '',
             machineId: record.machineId || '',
             status: record.status || 'pending',
