@@ -55,7 +55,7 @@ export default function Dashboard() {
           <select
             value={machineType}
             onChange={handleMachineTypeChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white"
+            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
           >
             <option value="bottlefiller">Bottle Filler</option>
             <option value="lathe">CNC Lathe</option>
@@ -65,7 +65,7 @@ export default function Dashboard() {
           <select
             value={machineId}
             onChange={handleMachineChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white"
+            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
           >
             {machineOptions.map(id => (
               <option key={id} value={id}>{id}</option>

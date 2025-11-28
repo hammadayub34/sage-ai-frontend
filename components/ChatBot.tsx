@@ -312,36 +312,61 @@ export function ChatBot({ isMinimized, onToggleMinimize, width = 384 }: ChatBotP
                 </div>
               )}
 
-              {/* Assistant message */}
-              {msg.role === 'assistant' && (
+              {/* Assistant message - hide if empty and loading (loading indicator will show instead) */}
+              {msg.role === 'assistant' && (msg.content.trim() || !loading) && (
                 <div className="space-y-3">
                   <div className="text-xs text-gray-500 font-medium">Wise Guy</div>
-                  <div className="space-y-2">
-                    <ReactMarkdown components={markdownComponents}>
-                      {msg.content}
-                    </ReactMarkdown>
-                  </div>
+                  {msg.content.trim() ? (
+                    <div className="space-y-2">
+                      <ReactMarkdown components={markdownComponents}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : null}
                   
                   {/* Sources section - separate section if available */}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-4 pt-3 border-t border-dark-border">
                       <div className="text-xs text-gray-500 font-medium mb-2">Sources</div>
                       <div className="space-y-1">
-                        {msg.sources.map((source, sourceIdx) => (
-                          <div key={sourceIdx} className="text-xs text-gray-400">
-                            {source.alarm_name && (
-                              <span className="text-gray-300">{formatAlarmName(source.alarm_name)}</span>
-                            )}
-                            {source.machine_type && (
-                              <span className="text-gray-500 ml-2">({source.machine_type})</span>
-                            )}
-                            {source.score !== undefined && (
-                              <span className="text-gray-600 ml-2">
-                                {Math.round(source.score * 100)}%
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                        {msg.sources.map((source: any, sourceIdx: number) => {
+                          // Display source based on document type
+                          let displayText = '';
+                          
+                          if (source.document_type === 'Work Orders History') {
+                            // For work orders, show work order number and status
+                            displayText = source.label || 'Work Order';
+                            if (source.machine_id) {
+                              displayText += ` (${source.machine_id})`;
+                            }
+                            if (source.status) {
+                              displayText += ` - ${source.status}`;
+                            }
+                          } else if (source.document_type === 'Maintenance Work Order Manual') {
+                            // For maintenance manual, show task number or alarm name
+                            displayText = source.label || 'Maintenance Manual';
+                            if (source.machine_type) {
+                              displayText += ` (${source.machine_type})`;
+                            }
+                          } else {
+                            // For alarm response manual, show alarm name
+                            displayText = source.label ? formatAlarmName(source.label) : 'Alarm Procedure';
+                            if (source.machine_type) {
+                              displayText += ` (${source.machine_type})`;
+                            }
+                          }
+                          
+                          return (
+                            <div key={sourceIdx} className="text-xs text-gray-400">
+                              <span className="text-gray-300">{displayText}</span>
+                              {source.score !== undefined && (
+                                <span className="text-gray-600 ml-2">
+                                  {Math.round(source.score * 100)}%
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

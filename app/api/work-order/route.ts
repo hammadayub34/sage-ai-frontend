@@ -74,6 +74,45 @@ export async function POST(request: NextRequest) {
     await writeApi.close();
     console.log('[WorkOrder API] Work order saved successfully');
 
+    // Append to markdown document and embed into Pinecone (async, don't wait)
+    try {
+      const { exec } = require('child_process');
+      const path = require('path');
+      const fs = require('fs');
+      const projectRoot = path.resolve(process.cwd(), '..');
+      const scriptPath = path.join(projectRoot, 'scripts', 'append_work_order_to_doc.py');
+      
+      // Write work order data to temp file for Python script
+      const tmpDir = path.join(projectRoot, 'tmp');
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      const tempFile = path.join(tmpDir, `work_order_${workOrderData.workOrderNo}.json`);
+      fs.writeFileSync(tempFile, JSON.stringify(workOrderData), 'utf-8');
+      
+      // Run Python script to append to doc and embed (async, don't block response)
+      exec(`cd "${projectRoot}" && python3 scripts/append_work_order_to_doc.py "${tempFile}" && python3 scripts/embed_work_orders_history.py`, 
+        (error: any, stdout: string, stderr: string) => {
+          if (error) {
+            console.error('[WorkOrder API] Error appending to doc/embedding:', error);
+          } else {
+            console.log('[WorkOrder API] Work order appended to doc and embedded into Pinecone');
+          }
+          // Clean up temp file
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+            }
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        }
+      );
+    } catch (err) {
+      console.error('[WorkOrder API] Error setting up doc append/embed:', err);
+      // Don't fail the request if this fails
+    }
+
     return NextResponse.json({
       success: true,
       workOrderNo: workOrderData.workOrderNo,

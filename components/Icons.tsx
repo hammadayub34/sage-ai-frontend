@@ -145,6 +145,28 @@ export const SparkleIcon = ({ className = "w-4 h-4", size }: IconProps) => (
   </svg>
 );
 
+export const AIIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Main AI chip/circuit symbol */}
+    <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" opacity="0.2"/>
+    <rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+    {/* Circuit nodes */}
+    <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+    <circle cx="15" cy="9" r="1.5" fill="currentColor"/>
+    <circle cx="9" cy="15" r="1.5" fill="currentColor"/>
+    <circle cx="15" cy="15" r="1.5" fill="currentColor"/>
+    <circle cx="12" cy="12" r="2" fill="currentColor" opacity="0.6"/>
+    {/* Connecting lines */}
+    <path d="M9 9h3M15 9h-3M9 15h3M15 15h-3M12 9v3M12 12v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    {/* Sparkle effects around */}
+    <circle cx="4" cy="4" r="0.8" fill="currentColor" opacity="0.8"/>
+    <circle cx="20" cy="4" r="0.8" fill="currentColor" opacity="0.8"/>
+    <circle cx="4" cy="20" r="0.8" fill="currentColor" opacity="0.8"/>
+    <circle cx="20" cy="20" r="0.8" fill="currentColor" opacity="0.8"/>
+    <path d="M2 12h2M20 12h2M12 2v2M12 20v2" stroke="currentColor" strokeWidth="1" opacity="0.6"/>
+  </svg>
+);
+
 export const TrashIcon = ({ className = "w-4 h-4", size }: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
     <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>

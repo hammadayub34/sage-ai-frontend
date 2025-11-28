@@ -61,6 +61,13 @@ export default function WorkOrdersPage() {
     fetchWorkOrders();
   }, [filters]);
 
+  // Set today's date as default when switching to calendar view
+  useEffect(() => {
+    if (viewMode === 'calendar' && !selectedDate) {
+      setSelectedDate(new Date());
+    }
+  }, [viewMode, selectedDate]);
+
   const fetchWorkOrders = async () => {
     setLoading(true);
     try {
@@ -278,7 +285,13 @@ export default function WorkOrdersPage() {
               List
             </button>
             <button
-              onClick={() => setViewMode('calendar')}
+              onClick={() => {
+                setViewMode('calendar');
+                // Set today's date when switching to calendar view if no date is selected
+                if (!selectedDate) {
+                  setSelectedDate(new Date());
+                }
+              }}
               className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
                 viewMode === 'calendar'
                   ? 'bg-sage-500 text-white'
@@ -307,7 +320,7 @@ export default function WorkOrdersPage() {
             <select
               value={filters.status}
               onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-1 focus:ring-midnight-300"
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
             >
               <option value="">All</option>
               <option value="pending">Pending</option>
@@ -319,7 +332,7 @@ export default function WorkOrdersPage() {
             <select
               value={filters.priority}
               onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-1 focus:ring-midnight-300"
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
             >
               <option value="">All</option>
               <option value="Low">Low</option>

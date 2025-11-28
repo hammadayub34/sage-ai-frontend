@@ -39,6 +39,94 @@ function isGreetingOrCasual(message: string): boolean {
   return false;
 }
 
+// Use LLM to determine which document types to query based on intent
+async function determineDocumentTypes(message: string, conversationHistory: Array<{ role: string; content: string }> = []): Promise<{
+  includeAlarmManual: boolean;
+  includeMaintenanceManual: boolean;
+  includeWorkOrderHistory: boolean;
+}> {
+  // Build context from conversation history if available
+  let contextPrompt = message;
+  if (conversationHistory && conversationHistory.length > 0) {
+    const recentContext = conversationHistory
+      .slice(-4) // Last 2 exchanges
+      .map((msg: { role: string; content: string }) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+      .join('\n');
+    contextPrompt = `Previous conversation:\n${recentContext}\n\nCurrent question: ${message}`;
+  }
+  
+  const classificationPrompt = `You are a routing assistant for an industrial automation system knowledge base. Analyze the user's question and determine which document types should be queried to answer it.
+
+Available document types:
+1. alarm_response_manual - Contains alarm procedures, troubleshooting steps, and alarm resolution procedures
+2. maintenance_work_order - Contains work order templates, parts lists, materials, task numbers, frequencies, and maintenance instructions
+3. work_order_history - Contains a chronological record of all generated work orders with their details, status, and completion information
+
+User question: "${contextPrompt}"
+
+Determine which document type(s) should be queried. Consider:
+- If asking about EXISTING work orders (e.g., "how many work orders", "what work orders do I have", "show me work orders", "list work orders") -> use work_order_history
+- If asking about alarm procedures, troubleshooting, or what to do when an alarm occurs -> use alarm_response_manual
+- If asking about maintenance procedures, parts, materials, or how to create/work with work orders -> use maintenance_work_order
+- If the question could benefit from multiple sources, include multiple document types
+
+Return ONLY a JSON object with this exact structure:
+{
+  "alarm_response_manual": true/false,
+  "maintenance_work_order": true/false,
+  "work_order_history": true/false
+}
+
+Do not include any other text, explanations, or markdown formatting. Only return the JSON object.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a precise routing assistant. Always return valid JSON only, no additional text or markdown.',
+        },
+        {
+          role: 'user',
+          content: classificationPrompt,
+        },
+      ],
+      temperature: 0.1, // Low temperature for consistent routing
+      max_tokens: 100,
+    });
+
+    const responseText = completion.choices[0]?.message?.content || '{}';
+    
+    // Extract JSON from response (handle markdown code blocks if present)
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn('⚠️ Could not parse LLM routing response, defaulting to all documents');
+      return {
+        includeAlarmManual: true,
+        includeMaintenanceManual: true,
+        includeWorkOrderHistory: true,
+      };
+    }
+
+    const routing = JSON.parse(jsonMatch[0]);
+    
+    return {
+      includeAlarmManual: routing.alarm_response_manual === true,
+      includeMaintenanceManual: routing.maintenance_work_order === true,
+      includeWorkOrderHistory: routing.work_order_history === true,
+    };
+  } catch (error: any) {
+    console.error('❌ Error in LLM routing:', error);
+    // Fallback to querying all documents if LLM fails
+    return {
+      includeAlarmManual: true,
+      includeMaintenanceManual: true,
+      includeWorkOrderHistory: true,
+    };
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { message, machine_type, conversationHistory = [] } = await request.json();
@@ -93,26 +181,50 @@ export async function POST(request: NextRequest) {
       console.log('📊 Enhanced query with conversation context for better relevance');
     }
     
-    // Step 2: Create embedding for enhanced query (includes conversation context if available)
+    // Step 2: Use LLM to determine which document types to query based on intent
+    const documentTypes = await determineDocumentTypes(message, conversationHistory);
+    console.log('🔀 LLM Routing to document types:', {
+      alarmManual: documentTypes.includeAlarmManual,
+      maintenanceManual: documentTypes.includeMaintenanceManual,
+      workOrderHistory: documentTypes.includeWorkOrderHistory,
+    });
+    
+    // Step 3: Create embedding for enhanced query (includes conversation context if available)
     const queryEmbedding = await createEmbedding(enhancedQuery);
     
-    // Step 3: Query Pinecone (optional filter by machine_type, but query ALL document types)
+    // Step 4: Query Pinecone with document type routing
     const index = await getPineconeIndex();
-    const filter: any = machine_type 
-      ? { machine_type: { $eq: machine_type } }
-      : undefined;
-    // Note: No document_type filter - this allows querying both:
-    // - ALARM_RESPONSE_MANUAL.md (alarm procedures)
-    // - MAINTENANCE_WORK_ORDERS.md (work order procedures)
+    
+    // Build document_type filter based on routing decision
+    const documentTypeFilters: string[] = [];
+    if (documentTypes.includeAlarmManual) {
+      documentTypeFilters.push('alarm_response_manual');
+    }
+    if (documentTypes.includeMaintenanceManual) {
+      documentTypeFilters.push('maintenance_work_order');
+    }
+    if (documentTypes.includeWorkOrderHistory) {
+      documentTypeFilters.push('work_order_history');
+    }
+    
+    // Build filter: combine document_type filter with machine_type filter
+    const filter: any = {};
+    if (documentTypeFilters.length > 0) {
+      // Pinecone filter: document_type must be one of the selected types
+      filter.document_type = { $in: documentTypeFilters };
+    }
+    if (machine_type) {
+      filter.machine_type = { $eq: machine_type };
+    }
     
     const queryResponse = await index.query({
       vector: queryEmbedding,
-      topK: 5, // Get top 5 relevant chunks from both documents
+      topK: documentTypes.includeWorkOrderHistory ? 10 : 5, // Get more results for work order history queries
       includeMetadata: true,
-      filter,
+      filter: Object.keys(filter).length > 0 ? filter : undefined,
     });
 
-    // Step 4: Check relevance (adjust threshold based on conversation history)
+    // Step 5: Check relevance (adjust threshold based on conversation history)
     const topScore = queryResponse.matches[0]?.score || 0;
     const BASE_RELEVANCE_THRESHOLD = 0.35;
     // If there's conversation history, be more lenient (follow-up questions might have lower scores)
@@ -137,23 +249,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step 5: Build context from retrieved chunks
+    // Step 6: Build context from retrieved chunks
     const context = queryResponse.matches
       .map((match: any, i: number) => {
         const docType = match.metadata?.document_type || 'alarm_response';
-        const docName = docType === 'maintenance_work_order' 
-          ? 'Maintenance Work Order Manual' 
-          : 'Alarm Response Manual';
-        const sourceLabel = match.metadata?.alarm_name || match.metadata?.task_number || 'General';
-        return `[Source ${i + 1} - ${docName} - ${sourceLabel}]\n${match.metadata?.content || ''}`;
+        let docName = 'Alarm Response Manual';
+        if (docType === 'maintenance_work_order') {
+          docName = 'Maintenance Work Order Manual';
+        } else if (docType === 'work_order_history') {
+          docName = 'Work Orders History';
+        }
+        const sourceLabel = match.metadata?.work_order_no 
+          || match.metadata?.alarm_name 
+          || match.metadata?.task_number 
+          || 'General';
+        // For work order history, include more metadata in the context
+        const woContext = docType === 'work_order_history' 
+          ? `Work Order: ${match.metadata?.work_order_no || 'N/A'}\nStatus: ${match.metadata?.status || 'N/A'}\nPriority: ${match.metadata?.priority || 'N/A'}\nMachine: ${match.metadata?.machine_id || 'N/A'}\n\n${match.metadata?.content || ''}`
+          : match.metadata?.content || '';
+        return `[Source ${i + 1} - ${docName} - ${sourceLabel}]\n${woContext}`;
       })
       .join('\n\n');
 
-    // Step 6: Generate response using LLM with conversation history
+    // Step 7: Generate response using LLM with conversation history
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         {
           role: 'system',
-        content: 'You are a helpful assistant for industrial automation systems. You have access to two knowledge bases:\n1. Alarm Response Manual - Contains alarm procedures, troubleshooting steps, and alarm resolution procedures\n2. Maintenance Work Order Manual - Contains work order procedures, parts lists, materials, task numbers, frequencies, and maintenance instructions\n\nAnswer questions based on the provided context from either or both manuals. Be concise and practical. Use conversation history to maintain context and provide coherent responses. If the question relates to alarms, use the alarm response manual. If it relates to maintenance work orders, parts, or materials, use the maintenance work order manual.',
+        content: 'You are a helpful assistant for industrial automation systems. You have access to three knowledge bases:\n1. Alarm Response Manual - Contains alarm procedures, troubleshooting steps, and alarm resolution procedures\n2. Maintenance Work Order Manual - Contains work order procedures, parts lists, materials, task numbers, frequencies, and maintenance instructions\n3. Work Orders History - Contains a chronological record of all generated work orders with their details, status, and completion information\n\nAnswer questions based on the provided context from any of these sources. Be concise and practical. Use conversation history to maintain context and provide coherent responses. If the question relates to alarms, use the alarm response manual. If it relates to maintenance work orders, parts, or materials, use the maintenance work order manual. If the question asks about existing work orders (e.g., "how many work orders do I have", "what work orders are pending", "show me work orders for machine X"), use the work orders history.',
       },
     ];
 
@@ -184,15 +306,45 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           // Send initial metadata (sources, score, etc.)
+          // Build sources with proper labels based on document type
+          const sources = queryResponse.matches.map((m: any) => {
+            const docType = m.metadata?.document_type || 'alarm_response_manual';
+            
+            // For work order history, show work order number
+            if (docType === 'work_order_history') {
+              return {
+                label: m.metadata?.work_order_no || 'Work Order',
+                document_type: 'Work Orders History',
+                machine_id: m.metadata?.machine_id,
+                status: m.metadata?.status,
+                score: m.score,
+              };
+            }
+            
+            // For maintenance work order manual, show task number or alarm name
+            if (docType === 'maintenance_work_order') {
+              return {
+                label: m.metadata?.task_number || m.metadata?.alarm_name || 'Maintenance Manual',
+                document_type: 'Maintenance Work Order Manual',
+                machine_type: m.metadata?.machine_type,
+                score: m.score,
+              };
+            }
+            
+            // For alarm response manual, show alarm name
+            return {
+              label: m.metadata?.alarm_name || 'Alarm Procedure',
+              document_type: 'Alarm Response Manual',
+              machine_type: m.metadata?.machine_type,
+              score: m.score,
+            };
+          });
+          
           const metadata = JSON.stringify({
             type: 'metadata',
-      relevant: true,
-      score: topScore,
-      sources: queryResponse.matches.map((m: any) => ({
-        alarm_name: m.metadata?.alarm_name,
-        machine_type: m.metadata?.machine_type,
-        score: m.score,
-      })),
+            relevant: true,
+            score: topScore,
+            sources: sources,
           }) + '\n';
           controller.enqueue(new TextEncoder().encode(metadata));
 
