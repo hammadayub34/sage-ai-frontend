@@ -133,3 +133,21 @@ export const SendIcon = ({ className = "w-5 h-5", size }: IconProps) => (
   </svg>
 );
 
+export const CloseIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+  </svg>
+);
+
+export const SparkleIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2l2.4 7.2L22 9.6l-6 5.8 1.4 8.2L12 19.8l-5.4 3.8L8 15.4l-6-5.8 7.6-.4L12 2z" fill="currentColor"/>
+  </svg>
+);
+
+export const TrashIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
+  </svg>
+);
+

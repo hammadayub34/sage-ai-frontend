@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 interface ChatBotProps {
   isMinimized: boolean;
   onToggleMinimize: () => void;
+  width?: number;
 }
 
 interface Message {
@@ -24,7 +25,10 @@ interface Message {
 
 type ChatMode = 'ask' | 'agent' | 'plan';
 
-export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
+const CONVERSATION_HISTORY_LIMIT = 10; // FIFO queue size - last 10 messages sent to API for context
+const UI_MESSAGE_LIMIT = 50; // Maximum messages to keep in UI (for performance)
+
+export function ChatBot({ isMinimized, onToggleMinimize, width = 384 }: ChatBotProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,12 +42,31 @@ export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setLoading(true);
 
+    // Add a placeholder assistant message that we'll update as we stream
+    setMessages(prev => [...prev, { 
+      role: 'assistant', 
+      content: '',
+      sources: undefined,
+      relevant: undefined,
+      score: undefined,
+    }]);
+
     try {
-      // Build conversation history (last 10 messages for context)
-      const conversationHistory = messages.slice(-10).map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+      // Build FIFO conversation history (last 10 completed messages for context)
+      // Exclude the current user message and placeholder assistant message we just added
+      // This ensures we only send completed message pairs to maintain proper context
+      const completedMessages = messages.filter(msg => msg.content.trim());
+      const conversationHistory = completedMessages
+        .slice(-CONVERSATION_HISTORY_LIMIT) // FIFO: Get last 10 messages
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+      
+      // Log for debugging (can be removed in production)
+      if (conversationHistory.length > 0) {
+        console.log(`📊 FIFO Queue: Sending ${conversationHistory.length} previous messages for context`);
+      }
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -61,20 +84,106 @@ export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
         throw new Error('Failed to get response');
       }
 
+      // Check if response is streaming (text/event-stream) or JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        // Non-streaming response (greetings, etc.)
       const data = await response.json();
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: data.response || 'Sorry, I could not generate a response.',
-        sources: data.sources,
-        relevant: data.relevant,
-        score: data.score,
-      }]);
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastIndex = newMessages.length - 1;
+          if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+            newMessages[lastIndex] = {
+              ...newMessages[lastIndex],
+              content: data.response || 'Sorry, I could not generate a response.',
+              sources: data.sources,
+              relevant: data.relevant,
+              score: data.score,
+            };
+          }
+          // FIFO: Keep UI messages manageable for performance
+          // We keep more in UI than we send to API (for user visibility)
+          // Only trim if we exceed UI limit
+          if (newMessages.length > UI_MESSAGE_LIMIT) {
+            return newMessages.slice(-UI_MESSAGE_LIMIT);
+          }
+          return newMessages;
+        });
+      } else {
+        // Handle streaming response
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedContent = '';
+        let metadata: any = null;
+
+        if (!reader) {
+          throw new Error('No response body');
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(line => line.trim());
+
+          for (const line of lines) {
+            try {
+              const data = JSON.parse(line);
+
+              if (data.type === 'metadata') {
+                metadata = {
+                  sources: data.sources,
+                  relevant: data.relevant,
+                  score: data.score,
+                };
+              } else if (data.type === 'chunk') {
+                accumulatedContent += data.content;
+                // Update the last message (the assistant message) with accumulated content
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastIndex = newMessages.length - 1;
+                  if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+                    newMessages[lastIndex] = {
+                      ...newMessages[lastIndex],
+                      content: accumulatedContent,
+                      ...(metadata && {
+                        sources: metadata.sources,
+                        relevant: metadata.relevant,
+                        score: metadata.score,
+                      }),
+                    };
+                  }
+                  return newMessages;
+                });
+              } else if (data.type === 'done') {
+                // Streaming complete - message is now in the FIFO queue
+                console.log('✅ Streaming complete - message added to conversation history');
+                break;
+              } else if (data.type === 'error') {
+                throw new Error(data.error || 'Unknown error');
+              }
+            } catch (parseError) {
+              // Skip invalid JSON lines
+              console.warn('Failed to parse chunk:', line);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, there was an error processing your message. Please try again.'
-      }]);
+      // Update the last message with error
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastIndex = newMessages.length - 1;
+        if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+          newMessages[lastIndex] = {
+            ...newMessages[lastIndex],
+            content: 'Sorry, there was an error processing your message. Please try again.',
+          };
+        }
+        return newMessages;
+      });
     } finally {
       setLoading(false);
     }
@@ -120,31 +229,34 @@ export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
   }
 
   return (
-    <div className="w-96 bg-dark-panel border-l border-dark-border flex flex-col h-full">
+    <div 
+      className="bg-dark-panel border-l border-dark-border flex flex-col h-full"
+      style={{ width: `${width}px` }}
+    >
       {/* Header */}
       <div className="border-b border-dark-border flex-shrink-0">
         <div className="p-4 flex items-center justify-center relative">
           <h3 className="heading-inter heading-inter-sm !text-sage-400">Discover Infinite Wisdom</h3>
-          <button
-            onClick={onToggleMinimize}
+        <button
+          onClick={onToggleMinimize}
             className="absolute right-4 text-gray-400 hover:text-white transition-colors p-1 hover:bg-dark-border rounded"
-            title="Minimize"
+          title="Minimize"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M15.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
-        </div>
-        
+            <path
+              fillRule="evenodd"
+              d="M15.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </div>
+
         {/* Mode Tabs */}
         <div className="flex border-t border-dark-border">
           <button
@@ -189,8 +301,8 @@ export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
                 Ask me about alarm procedures, troubleshooting, or machine operations.
               </div>
             )}
-            
-            {messages.map((msg, idx) => (
+        
+        {messages.map((msg, idx) => (
             <div key={idx} className="space-y-2">
               {/* User message */}
               {msg.role === 'user' && (
@@ -240,17 +352,17 @@ export function ChatBot({ isMinimized, onToggleMinimize }: ChatBotProps) {
                       <div className="text-xs text-yellow-400">
                         ⚠️ This response may not be directly related to alarm procedures.
                       </div>
-                    </div>
+            </div>
                   )}
                 </div>
               )}
-            </div>
-            ))}
-            
-            {loading && (
+          </div>
+        ))}
+        
+        {loading && (
               <div className="space-y-2">
                 <div className="text-xs text-gray-500 font-medium">Wise Guy</div>
-                <div className="flex gap-1">
+              <div className="flex gap-1">
                   <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                   <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                   <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>

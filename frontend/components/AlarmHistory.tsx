@@ -32,7 +32,10 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <h3 className="heading-inter heading-inter-sm">Alarm History (Last 24h)</h3>
+          <div>
+            <h3 className="heading-inter heading-inter-sm">Alarm History</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Last 24 hours</p>
+          </div>
           {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && <div className="text-gray-400">Loading...</div>}
@@ -47,7 +50,10 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity mb-4"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <h3 className="heading-inter heading-inter-sm">Alarm History (Last 24h)</h3>
+          <div>
+            <h3 className="heading-inter heading-inter-sm">Alarm History</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Last 24 hours</p>
+          </div>
           {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {isExpanded && <div className="text-red-400">Error loading alarm history</div>}
@@ -79,7 +85,10 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-2">
-          <span className="heading-inter heading-inter-sm">Alarm History (Last 24h)</span>
+          <div>
+            <span className="heading-inter heading-inter-sm">Alarm History</span>
+            <p className="text-xs text-gray-500 mt-0.5">Last 24 hours</p>
+          </div>
           {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
         {totalAlarms > 0 && (

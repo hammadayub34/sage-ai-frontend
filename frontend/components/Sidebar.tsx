@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { DashboardIcon, ChatIcon } from './Icons';
+import { DashboardIcon, ChatIcon, CalendarIcon } from './Icons';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -17,6 +17,11 @@ export function Sidebar() {
       name: 'Chat Assistant',
       href: '/chat',
       icon: <ChatIcon className="w-6 h-6" />,
+    },
+    {
+      name: 'Work Orders',
+      href: '/work-orders',
+      icon: <CalendarIcon className="w-6 h-6" />,
     },
   ];
 
