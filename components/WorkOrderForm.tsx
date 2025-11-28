@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CloseIcon, SparkleIcon } from './Icons';
+import { CloseIcon, AIIcon } from './Icons';
 import { formatAlarmName } from '@/lib/utils';
 import { toast } from 'react-toastify';
 
@@ -96,22 +96,29 @@ export function WorkOrderForm({
     { description: '', quantity: '', partNumber: '' }
   ]);
 
-  // Generate work order number on mount
+  // Update formData when form opens or machineId/machineType props change
   useEffect(() => {
-    if (isOpen && !formData.workOrderNo) {
+    if (isOpen) {
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
       const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      
       setFormData(prev => ({
         ...prev,
-        workOrderNo: `WO-${dateStr}-${random}`,
-        weekOf: now.toISOString().slice(0, 10),
+        // Always update machine context when form opens or props change
+        machineId: machineId,
+        machineType: machineType,
+        alarmType: alarmType,
+        // Update equipment fields with current machineId
         equipmentName: machineId,
         equipmentNumber: machineId,
         equipmentLocation: machineId,
+        // Generate new work order number if form just opened
+        workOrderNo: prev.workOrderNo || `WO-${dateStr}-${random}`,
+        weekOf: prev.weekOf || now.toISOString().slice(0, 10),
       }));
     }
-  }, [isOpen, formData.workOrderNo, machineId]);
+  }, [isOpen, machineId, machineType, alarmType]);
 
   // Don't auto-check on form open - user will click the button
 
@@ -403,10 +410,22 @@ export function WorkOrderForm({
     setLoading(true);
 
     try {
+      // Ensure we're using the current machineId from props, not stale formData
+      const workOrderPayload = {
+        ...formData,
+        machineId: machineId, // Use prop value, not formData value
+        machineType: machineType, // Use prop value, not formData value
+        parts,
+        materials,
+      };
+
       console.log('[WorkOrderForm] Submitting work order:', {
         workOrderNo: formData.workOrderNo,
-        machineId: formData.machineId,
+        machineId: workOrderPayload.machineId,
+        machineType: workOrderPayload.machineType,
         alarmType: formData.alarmType,
+        'props.machineId': machineId,
+        'props.machineType': machineType,
       });
 
       const response = await fetch('/api/work-order', {
@@ -414,11 +433,7 @@ export function WorkOrderForm({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...formData,
-          parts,
-          materials,
-        }),
+        body: JSON.stringify(workOrderPayload),
       });
 
       const responseData = await response.json();
@@ -569,7 +584,7 @@ export function WorkOrderForm({
                 'Loading...'
               ) : (
                 <>
-                  <SparkleIcon className="w-4 h-4" />
+                  <AIIcon className="w-4 h-4" />
                   AI Auto Fill
                 </>
               )}
@@ -629,7 +644,7 @@ export function WorkOrderForm({
                 <select
                   value={formData.priority}
                   onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                  className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-midnight-300"
+                  className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
                 >
                   <option value="Low">Low</option>
                   <option value="Medium">Medium</option>
@@ -896,7 +911,7 @@ export function WorkOrderForm({
                 <button
                   type="button"
                   onClick={addPart}
-                  className="px-3 py-1 bg-sage-500 hover:bg-sage-600 text-white rounded text-sm font-medium transition-colors"
+                  className="px-3 py-1 h-[34px] bg-sage-500 hover:bg-sage-600 text-white rounded text-sm font-medium transition-colors flex items-center justify-center"
                 >
                   + Add Part
                 </button>
@@ -942,7 +957,7 @@ export function WorkOrderForm({
                     <button
                       type="button"
                       onClick={() => removePart(index)}
-                      className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded text-sm font-medium transition-colors"
+                      className="px-3 py-1 h-[34px] bg-red-500 hover:bg-red-600 text-white rounded text-sm font-medium transition-colors flex items-center justify-center"
                     >
                       Remove
                     </button>
@@ -958,7 +973,7 @@ export function WorkOrderForm({
                 <button
                   type="button"
                   onClick={addMaterial}
-                  className="px-3 py-1 bg-sage-500 hover:bg-sage-600 text-white rounded text-sm font-medium transition-colors"
+                  className="px-3 py-1 h-[34px] bg-sage-500 hover:bg-sage-600 text-white rounded text-sm font-medium transition-colors flex items-center justify-center"
                 >
                   + Add Material
                 </button>
@@ -990,7 +1005,7 @@ export function WorkOrderForm({
                     <button
                       type="button"
                       onClick={() => removeMaterial(index)}
-                      className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded text-sm font-medium transition-colors"
+                      className="px-3 py-1 h-[34px] bg-red-500 hover:bg-red-600 text-white rounded text-sm font-medium transition-colors flex items-center justify-center"
                     >
                       Remove
                     </button>

@@ -198,3 +198,31 @@ body {
   background-size: 20px 20px;
 }
 
+/* Custom select/dropdown styling with sage color */
+select {
+  color: #e5e5e5 !important;
+  background-color: #1a1a1a !important;
+}
+
+select:focus {
+  outline: none !important;
+  border-color: #437874 !important;
+  box-shadow: 0 0 0 2px rgba(67, 120, 116, 0.2) !important;
+}
+
+select:active {
+  border-color: #437874 !important;
+}
+
+/* Style options */
+select option {
+  background-color: #1a1a1a !important;
+  color: #e5e5e5 !important;
+  padding: 8px;
+}
+
+/* Note: The blue highlight when selecting options in the dropdown is controlled by the browser/OS
+   and cannot be fully overridden with CSS. This is a limitation of native HTML select elements.
+   The focus ring and border colors are styled with sage, but the option selection highlight
+   will remain the browser's default blue. */
+
