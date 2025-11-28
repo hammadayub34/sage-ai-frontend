@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, WarningIcon } from './Icons';
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, WarningIcon, FileIcon } from './Icons';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AlarmInstructions } from './AlarmInstructions';
@@ -337,9 +337,10 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
                               machineType: eventMachineType,
                               state: event.state,
                             })}
-                            className="text-xs bg-midnight-300 hover:bg-midnight-400 text-dark-text px-2 py-1 rounded transition-colors"
+                            className="flex items-center gap-1.5 text-xs bg-midnight-300 hover:bg-midnight-400 text-dark-text px-2 py-1 rounded transition-colors"
                           >
-                            📖 Instructions
+                            <FileIcon className="w-3 h-3" />
+                            Instructions
                           </button>
                           <div className="text-xs text-gray-400">
                             {event.machine_id}
