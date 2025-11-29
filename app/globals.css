@@ -226,3 +226,8 @@ select option {
    The focus ring and border colors are styled with sage, but the option selection highlight
    will remain the browser's default blue. */
 
+/* Hide React Flow attribution */
+.react-flow__attribution {
+  display: none !important;
+}
+

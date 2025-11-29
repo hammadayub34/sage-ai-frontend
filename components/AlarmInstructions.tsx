@@ -127,7 +127,7 @@ function formatInstructions(text: string) {
   const flushed = flushList();
   if (flushed) elements.push(flushed);
   
-  return elements.length > 0 ? elements : <p className="text-gray-400">No instructions available.</p>;
+  return elements.length > 0 ? elements : <p className="text-gray-400">No analysis available.</p>;
 }
 
 interface AlarmInstructionsProps {
@@ -166,16 +166,22 @@ export function AlarmInstructions({
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<RAGResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingChunks, setStreamingChunks] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchInstructions() {
       const clientStartTime = performance.now();
       try {
         setLoading(true);
+        setStreamingText('');
+        setStreamingChunks([]);
+        
         const response = await fetch('/api/alarms/rag', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
           },
           body: JSON.stringify({
             alarm_type: alarmType,
@@ -189,26 +195,92 @@ export function AlarmInstructions({
           throw new Error('Failed to fetch instructions');
         }
 
-        const result = await response.json();
-        const clientEndTime = performance.now();
-        const clientTotalTime = clientEndTime - clientStartTime;
-        
-        // Log timing information
-        console.log('⏱️ [RAG Client] Total client-side time:', clientTotalTime.toFixed(2), 'ms');
-        if (result.timings) {
-          console.log('⏱️ [RAG Server] Breakdown:', {
-            embedding: `${result.timings.embedding}ms`,
-            pinecone: `${result.timings.pinecone}ms`,
-            llm: `${result.timings.llm}ms`,
-            serverTotal: `${result.timings.total}ms`,
-            clientTotal: `${clientTotalTime.toFixed(2)}ms`,
-          });
+        // Check if response is streaming
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('text/event-stream')) {
+          // Handle streaming response
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let metadata: any = null;
+          let accumulatedText = '';
+
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value);
+              const lines = chunk.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const jsonData = JSON.parse(line.slice(6));
+                    
+                    if (jsonData.type === 'metadata') {
+                      metadata = jsonData.data;
+                      setStreamingChunks(metadata.chunks || []);
+                    } else if (jsonData.type === 'chunk') {
+                      accumulatedText += jsonData.content;
+                      setStreamingText(accumulatedText);
+                    } else if (jsonData.type === 'done') {
+                      // Finalize data
+                      const clientEndTime = performance.now();
+                      const clientTotalTime = clientEndTime - clientStartTime;
+                      
+                      console.log('⏱️ [RAG Client] Total client-side time:', clientTotalTime.toFixed(2), 'ms');
+                      if (jsonData.timings) {
+                        console.log('⏱️ [RAG Server] Breakdown:', {
+                          embedding: `${metadata.timings.embedding}ms`,
+                          pinecone: `${metadata.timings.pinecone}ms`,
+                          llm: `${jsonData.timings.llm}ms`,
+                          serverTotal: `${jsonData.timings.total}ms`,
+                          clientTotal: `${clientTotalTime.toFixed(2)}ms`,
+                        });
+                      }
+
+                      setData({
+                        instructions: accumulatedText,
+                        chunks: metadata.chunks || [],
+                        alarm_type: metadata.alarm_type,
+                        machine_type: metadata.machine_type,
+                        state: metadata.state,
+                        timings: {
+                          ...metadata.timings,
+                          ...jsonData.timings,
+                        },
+                      });
+                      setLoading(false);
+                    }
+                  } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          // Non-streaming response (backward compatibility)
+          const result = await response.json();
+          const clientEndTime = performance.now();
+          const clientTotalTime = clientEndTime - clientStartTime;
+          
+          console.log('⏱️ [RAG Client] Total client-side time:', clientTotalTime.toFixed(2), 'ms');
+          if (result.timings) {
+            console.log('⏱️ [RAG Server] Breakdown:', {
+              embedding: `${result.timings.embedding}ms`,
+              pinecone: `${result.timings.pinecone}ms`,
+              llm: `${result.timings.llm}ms`,
+              serverTotal: `${result.timings.total}ms`,
+              clientTotal: `${clientTotalTime.toFixed(2)}ms`,
+            });
+          }
+          
+          setData(result);
+          setLoading(false);
         }
-        
-        setData(result);
       } catch (err: any) {
         setError(err.message || 'Failed to load instructions');
-      } finally {
         setLoading(false);
       }
     }
@@ -216,12 +288,12 @@ export function AlarmInstructions({
     fetchInstructions();
   }, [alarmType, machineType, state, machineId]);
 
-  if (loading) {
+  if (loading && !streamingText) {
     return (
-      <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
+      <div className={`${onClose ? 'bg-dark-panel p-6 rounded-lg border border-dark-border' : ''} w-full`}>
         <div className="flex items-center gap-2">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-          <span className="text-gray-400">Loading instructions...</span>
+          <span className="text-gray-400">Loading AI Analysis...</span>
         </div>
       </div>
     );
@@ -229,7 +301,7 @@ export function AlarmInstructions({
 
   if (error) {
     return (
-      <div className="bg-dark-panel p-6 rounded-lg border border-red-500/30">
+      <div className={`${onClose ? 'bg-dark-panel p-6 rounded-lg border border-red-500/30' : ''} w-full`}>
         <div className="text-red-400">Error: {error}</div>
       </div>
     );
@@ -240,37 +312,37 @@ export function AlarmInstructions({
   }
 
   return (
-    <div className="bg-dark-panel rounded-lg border border-dark-border max-w-4xl max-h-[85vh] flex flex-col">
-      <div className="flex items-center justify-between p-6 pb-4 border-b border-dark-border flex-shrink-0">
-        <div>
-          <h3 className="heading-inter heading-inter-md flex items-center gap-2">
-            {state === 'RAISED' ? (
-              <>
-                <AlertIcon className="w-5 h-5 text-red-400" />
-                <span>Alarm Response Instructions</span>
-              </>
-            ) : (
-              <>
-                <CheckIcon className="w-5 h-5 text-sage-400" />
-                <span>Issue Resolved</span>
-              </>
-            )}
-          </h3>
-          <div className="flex items-center gap-3 mt-2">
-            <span className="text-gray-400 text-sm">
-              <span className="font-semibold text-gray-300">Alarm:</span> {formatAlarmName(alarmType)}
-            </span>
-            <span className="text-gray-500">•</span>
-            <span className="text-gray-400 text-sm">
-              <span className="font-semibold text-gray-300">Machine:</span> {machineId || 'N/A'}
-            </span>
-            <span className="text-gray-500">•</span>
-            <span className="text-gray-400 text-sm capitalize">
-              {machineType}
-            </span>
+    <div className={`${onClose ? 'bg-dark-panel rounded-lg border border-dark-border max-w-4xl max-h-[85vh]' : ''} w-full flex flex-col`}>
+      {onClose && (
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-dark-border flex-shrink-0">
+          <div>
+            <h3 className="heading-inter heading-inter-md flex items-center gap-2">
+              {state === 'RAISED' ? (
+                <>
+                  <AlertIcon className="w-5 h-5 text-red-400" />
+                  <span>AI Analysis</span>
+                </>
+              ) : (
+                <>
+                  <CheckIcon className="w-5 h-5 text-sage-400" />
+                  <span>Issue Resolved</span>
+                </>
+              )}
+            </h3>
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-gray-400 text-sm">
+                <span className="font-semibold text-gray-300">Alarm:</span> {formatAlarmName(alarmType)}
+              </span>
+              <span className="text-gray-500">•</span>
+              <span className="text-gray-400 text-sm">
+                <span className="font-semibold text-gray-300">Machine:</span> {machineId || 'N/A'}
+              </span>
+              <span className="text-gray-500">•</span>
+              <span className="text-gray-400 text-sm capitalize">
+                {machineType}
+              </span>
+            </div>
           </div>
-        </div>
-        {onClose && (
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors text-2xl font-light leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-dark-border"
@@ -278,26 +350,30 @@ export function AlarmInstructions({
           >
             ×
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className={`flex-1 ${onClose ? 'overflow-y-auto px-6 py-4' : ''}`}>
         <div className="prose prose-invert max-w-none">
           <div className="text-gray-300 leading-relaxed space-y-4">
-            {formatInstructions(data.instructions)}
+            {loading && streamingText ? (
+              formatInstructions(streamingText)
+            ) : data ? (
+              formatInstructions(data.instructions)
+            ) : null}
           </div>
         </div>
       </div>
 
-      {data.chunks.length > 0 && (
-        <div className="mt-auto pt-4 px-6 pb-6 border-t border-dark-border flex-shrink-0">
+      {((data?.chunks && data.chunks.length > 0) || (streamingChunks.length > 0)) && (
+        <div className={`mt-auto pt-4 ${onClose ? 'px-6 pb-6' : 'pt-4'} ${onClose ? 'border-t border-dark-border' : ''} flex-shrink-0`}>
           <div className="flex items-center gap-2 text-gray-500 text-xs">
             <span className="text-gray-400">📚</span>
-            <span>Based on {data.chunks.length} relevant procedure section(s) from the alarm manual</span>
+            <span>Based on {(data?.chunks || streamingChunks).length} relevant procedure section(s) from the alarm manual</span>
           </div>
-          {data.chunks.some(c => c.severity) && (
+          {(data?.chunks || streamingChunks).some((c: any) => c.severity) && (
             <div className="mt-2 flex items-center gap-4 text-xs">
-              {data.chunks.map((chunk, idx) => (
+              {(data?.chunks || streamingChunks).map((chunk: any, idx: number) => (
                 <span key={idx} className="text-gray-500">
                   {chunk.severity && (
                     <span className="text-gray-400">

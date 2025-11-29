@@ -77,9 +77,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ alerts: results });
   } catch (error: any) {
-    console.error('Error fetching notifications:', error);
+    console.error('Error fetching alarm events:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch notifications' },
+      { error: error.message || 'Failed to fetch alarm events' },
       { status: 500 }
     );
   }

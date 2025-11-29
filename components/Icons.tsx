@@ -179,3 +179,29 @@ export const NotificationIcon = ({ className = "w-6 h-6", size }: IconProps) => 
   </svg>
 );
 
+export const AlarmEventsIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Activity log / event list icon */}
+    <path d="M3 3h18v2H3V3zm0 4h18v2H3V7zm0 4h12v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z" fill="currentColor" opacity="0.6"/>
+    {/* Alert indicators on the right */}
+    <circle cx="19" cy="5" r="2" fill="currentColor" opacity="0.9"/>
+    <circle cx="19" cy="9" r="2" fill="currentColor" opacity="0.9"/>
+    <path d="M17 11h4v2h-4v-2zm0 4h4v2h-4v-2z" fill="currentColor" opacity="0.6"/>
+  </svg>
+);
+
+export const WorkflowIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Nodes */}
+    <rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    <rect x="13" y="3" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    <rect x="3" y="13" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    <rect x="13" y="13" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    {/* Edges/Connections */}
+    <path d="M9 6L13 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M9 16L13 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M6 9L6 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M16 9L16 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+

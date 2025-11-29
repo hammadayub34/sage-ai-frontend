@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { DashboardIcon, ChatIcon, CalendarIcon, NotificationIcon } from './Icons';
+import { DashboardIcon, ChatIcon, CalendarIcon, AlarmEventsIcon, WorkflowIcon } from './Icons';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -24,9 +24,14 @@ export function Sidebar() {
       icon: <CalendarIcon className="w-6 h-6" />,
     },
     {
-      name: 'Notifications',
-      href: '/notifications',
-      icon: <NotificationIcon className="w-6 h-6" />,
+      name: 'Alarm Events',
+      href: '/alarm-events',
+      icon: <AlarmEventsIcon className="w-6 h-6" />,
+    },
+    {
+      name: 'Workflows',
+      href: '/workflows',
+      icon: <WorkflowIcon className="w-6 h-6" />,
     },
   ];
 

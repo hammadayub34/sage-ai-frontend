@@ -340,7 +340,7 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
                             className="flex items-center gap-1.5 text-xs bg-midnight-300 hover:bg-midnight-400 text-dark-text px-2 py-1 rounded transition-colors"
                           >
                             <FileIcon className="w-3 h-3" />
-                            Instructions
+                            AI Analysis
                           </button>
                           <div className="text-xs text-gray-400">
                             {event.machine_id}
@@ -356,7 +356,7 @@ export function AlarmEvents({ machineId = 'machine-01', machineType }: AlarmEven
         )}
       </div>
 
-      {/* Alarm Instructions Modal */}
+      {/* AI Analysis Modal */}
       {selectedAlarm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="relative">

@@ -213,16 +213,16 @@ export function ChatBot({ isMinimized, onToggleMinimize, width = 384 }: ChatBotP
     a: ({ href, children }: any) => <a href={href} className="text-sage-400 hover:text-sage-300 underline text-sm" target="_blank" rel="noopener noreferrer">{children}</a>,
   };
 
-  // If minimized, show only a small button on the right edge
+  // If minimized, show only a small button on the top-right edge
   if (isMinimized) {
     return (
       <div className="absolute right-0 top-0 z-10">
         <button
           onClick={onToggleMinimize}
-          className="bg-dark-panel border border-dark-border border-r-0 rounded-l-lg px-3 py-4 hover:bg-dark-border transition-colors"
+          className="bg-dark-panel/90 border border-dark-border border-r-0 rounded-l-full px-2 py-2 hover:bg-dark-border transition-colors shadow-md"
           title="Open Chat Assistant"
         >
-          <ChatIcon className="w-5 h-5" />
+          <ChatIcon className="w-4 h-4" />
         </button>
       </div>
     );
