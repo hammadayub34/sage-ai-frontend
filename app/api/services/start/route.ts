@@ -141,6 +141,55 @@ async function startInfluxDBWriter() {
   }
 }
 
+async function checkIfAnyAgentsRunning(): Promise<boolean> {
+  try {
+    // Check for any mock_plc_agent.py processes
+    const { stdout: mockPids } = await execAsync(`pgrep -f "mock_plc_agent.py"`).catch(() => {
+      return { stdout: '' };
+    });
+    
+    // Check for any lathe_sim.py processes
+    const { stdout: lathePids } = await execAsync(`pgrep -f "lathe_sim.py"`).catch(() => {
+      return { stdout: '' };
+    });
+    
+    const hasMockPLC = mockPids.trim().length > 0;
+    const hasLatheSim = lathePids.trim().length > 0;
+    
+    return hasMockPLC || hasLatheSim;
+  } catch (error: any) {
+    return false;
+  }
+}
+
+async function startAlarmMonitor() {
+  try {
+    // Check if alarm monitor is already running
+    const { stdout: pids } = await execAsync(`pgrep -f "alarm_monitor.py"`).catch(() => {
+      return { stdout: '' };
+    });
+    
+    if (pids.trim().length > 0) {
+      console.log('[Start API] Alarm monitor already running');
+      return;
+    }
+    
+    console.log('[Start API] Starting alarm monitor...');
+    const { exec } = require('child_process');
+    exec(`cd "${PROJECT_ROOT}" && nohup python3 alarm_monitor/alarm_monitor.py > /tmp/alarm_monitor.log 2>&1 &`, 
+      (error: any) => {
+        if (error) {
+          console.error('[Start API] Error starting alarm monitor:', error);
+        } else {
+          console.log('[Start API] Alarm monitor started');
+        }
+      }
+    );
+  } catch (error: any) {
+    console.error('[Start API] Error starting alarm monitor:', error);
+  }
+}
+
 async function startMockPLC(machineId: string) {
   try {
     // Check if already running for this machine using pgrep
@@ -155,6 +204,15 @@ async function startMockPLC(machineId: string) {
       }
     } catch {
       // pgrep returns non-zero if not found, which is fine
+    }
+    
+    // Check if this is the first agent starting - if so, start alarm monitor
+    const anyAgentsRunning = await checkIfAnyAgentsRunning();
+    if (!anyAgentsRunning) {
+      console.log('[Start API] First agent starting, starting alarm monitor');
+      await startAlarmMonitor();
+      // Give alarm monitor time to start
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     // Start the service in background with better error handling
@@ -240,6 +298,15 @@ async function startLatheSim(latheMachineId: string) {
       }
     } catch {
       // pgrep returns non-zero if not found, which is fine
+    }
+    
+    // Check if this is the first agent starting - if so, start alarm monitor
+    const anyAgentsRunning = await checkIfAnyAgentsRunning();
+    if (!anyAgentsRunning) {
+      console.log('[Start API] First agent starting, starting alarm monitor');
+      await startAlarmMonitor();
+      // Give alarm monitor time to start
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     // Start the service in background with better error handling

@@ -21,8 +21,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let stopResult;
     if (service === 'influxdb_writer') {
-      return await stopInfluxDBWriter();
+      stopResult = await stopInfluxDBWriter();
     } else if (service === 'mock_plc') {
       if (!machineId) {
         return NextResponse.json(
@@ -32,9 +33,17 @@ export async function POST(request: NextRequest) {
       }
       // Check if this is a lathe machine (starts with "lathe")
       if (machineId.startsWith('lathe')) {
-        return await stopLatheSim(machineId);
+        stopResult = await stopLatheSim(machineId);
       } else {
-      return await stopMockPLC(machineId);
+        stopResult = await stopMockPLC(machineId);
+      }
+      
+      // After stopping an agent, check if any agents are still running
+      // If no agents are running, stop the alarm monitor
+      const anyAgentsRunning = await checkIfAnyAgentsRunning();
+      if (!anyAgentsRunning) {
+        console.log('[Stop API] No agents running, stopping alarm monitor');
+        await stopAlarmMonitor();
       }
     } else {
       return NextResponse.json(
@@ -42,6 +51,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    
+    return stopResult;
   } catch (error: any) {
     console.error('Error stopping service:', error);
     return NextResponse.json(
@@ -72,52 +83,171 @@ async function stopInfluxDBWriter() {
 
 async function stopMockPLC(machineId: string) {
   try {
-    // First, find the PID by checking environment variables (same method as status endpoint)
+    console.log(`[Stop API] Attempting to stop Mock PLC for ${machineId}`);
+    
+    // First, find all PIDs for mock_plc_agent.py
     const { stdout: pids } = await execAsync(`pgrep -f "mock_plc_agent.py"`).catch(() => {
       return { stdout: '' };
     });
     
     if (!pids.trim()) {
+      console.log(`[Stop API] No mock_plc_agent.py processes found`);
       return NextResponse.json({
         success: true,
         message: `Mock PLC for ${machineId} stopped (or was not running)`,
       });
     }
     
-    // Check each PID's environment for MACHINE_ID
-    const pidList = pids.trim().split('\n');
+    // Try to find the matching process by checking environment variables
+    const pidList = pids.trim().split('\n').filter(pid => pid.trim());
+    console.log(`[Stop API] Found ${pidList.length} process(es): ${pidList.join(', ')}`);
+    let foundAndKilled = false;
+    let killedPid: string | null = null;
+    
     for (const pid of pidList) {
       try {
         // Check if this process has the matching MACHINE_ID in its environment
         const { stdout: env } = await execAsync(`ps e -p ${pid} 2>/dev/null | tr ' ' '\\n' | grep "^MACHINE_ID=" || echo ""`).catch(() => {
           return { stdout: '' };
         });
-        if (env.includes(`MACHINE_ID=${machineId}`)) {
-          // Found the matching process, kill it
-          await execAsync(`kill ${pid}`).catch(() => {
-            // Process might have exited, continue
-          });
-          return NextResponse.json({
-            success: true,
-            message: `Mock PLC for ${machineId} stopped`,
-          });
+        const envStr = env.trim();
+        console.log(`[Stop API] PID ${pid}: MACHINE_ID=${envStr}`);
+        
+        if (envStr.includes(`MACHINE_ID=${machineId}`)) {
+          // Found the matching process, kill it with SIGTERM first, then SIGKILL if needed
+          console.log(`[Stop API] ✅ Match found! Killing PID ${pid} for MACHINE_ID=${machineId}`);
+          try {
+            // Try graceful kill first
+            await execAsync(`kill ${pid}`);
+            console.log(`[Stop API] Sent SIGTERM to PID ${pid}`);
+            
+            // Wait a moment and check if it's still running
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const { stdout: stillRunning } = await execAsync(`ps -p ${pid} 2>/dev/null || echo ""`).catch(() => ({ stdout: '' }));
+            
+            if (stillRunning.trim()) {
+              // Process still running, force kill
+              console.log(`[Stop API] Process still running, sending SIGKILL to PID ${pid}`);
+              await execAsync(`kill -9 ${pid}`).catch(() => {});
+            }
+            
+            killedPid = pid;
+            foundAndKilled = true;
+            break;
+          } catch (killError: any) {
+            console.log(`[Stop API] Error killing PID ${pid}:`, killError.message);
+            // Try force kill
+            try {
+              await execAsync(`kill -9 ${pid}`).catch(() => {});
+              killedPid = pid;
+              foundAndKilled = true;
+              break;
+            } catch {
+              // Continue to next process
+            }
+          }
         }
-      } catch {
+      } catch (err: any) {
+        console.log(`[Stop API] Error checking PID ${pid}:`, err.message);
         // Process might have exited, continue
       }
     }
     
-    // No matching process found
+    // If we didn't find a match by environment variable, but there's only one process,
+    // kill it anyway (fallback for cases where env var isn't accessible)
+    if (!foundAndKilled && pidList.length === 1) {
+      const pid = pidList[0];
+      console.log(`[Stop API] No env match found, but only one process. Killing PID ${pid} as fallback`);
+      try {
+        await execAsync(`kill ${pid}`).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const { stdout: stillRunning } = await execAsync(`ps -p ${pid} 2>/dev/null || echo ""`).catch(() => ({ stdout: '' }));
+        if (stillRunning.trim()) {
+          await execAsync(`kill -9 ${pid}`).catch(() => {});
+        }
+        killedPid = pid;
+        foundAndKilled = true;
+      } catch (err: any) {
+        console.log(`[Stop API] Error in fallback kill:`, err.message);
+      }
+    }
+    
+    // If still no match and multiple processes, kill all of them (safety measure)
+    if (!foundAndKilled && pidList.length > 1) {
+      console.log(`[Stop API] Multiple processes found, killing all as safety measure`);
+      try {
+        await execAsync(`pkill -f "mock_plc_agent.py"`).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await execAsync(`pkill -9 -f "mock_plc_agent.py"`).catch(() => {});
+        foundAndKilled = true;
+      } catch (err: any) {
+        console.log(`[Stop API] Error in pkill:`, err.message);
+      }
+    }
+    
+    console.log(`[Stop API] Stop result: foundAndKilled=${foundAndKilled}, killedPid=${killedPid}`);
+    
     return NextResponse.json({
       success: true,
-      message: `Mock PLC for ${machineId} stopped (or was not running)`,
+      message: foundAndKilled 
+        ? `Mock PLC for ${machineId} stopped${killedPid ? ` (PID ${killedPid})` : ''}`
+        : `Mock PLC for ${machineId} stopped (or was not running)`,
     });
   } catch (error: any) {
-    // Even if kill fails, assume it's stopped
+    console.error(`[Stop API] Error in stopMockPLC:`, error);
+    // Even if kill fails, try pkill as a fallback
+    try {
+      console.log(`[Stop API] Attempting fallback pkill`);
+      await execAsync(`pkill -f "mock_plc_agent.py"`).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await execAsync(`pkill -9 -f "mock_plc_agent.py"`).catch(() => {});
+    } catch (err: any) {
+      console.log(`[Stop API] Fallback pkill error:`, err.message);
+    }
     return NextResponse.json({
       success: true,
       message: `Mock PLC for ${machineId} stopped (or was not running)`,
     });
+  }
+}
+
+async function checkIfAnyAgentsRunning(): Promise<boolean> {
+  try {
+    // Check for any mock_plc_agent.py processes
+    const { stdout: mockPids } = await execAsync(`pgrep -f "mock_plc_agent.py"`).catch(() => {
+      return { stdout: '' };
+    });
+    
+    // Check for any lathe_sim.py processes
+    const { stdout: lathePids } = await execAsync(`pgrep -f "lathe_sim.py"`).catch(() => {
+      return { stdout: '' };
+    });
+    
+    const hasMockPLC = mockPids.trim().length > 0;
+    const hasLatheSim = lathePids.trim().length > 0;
+    
+    console.log(`[Stop API] Agent check: mock_plc=${hasMockPLC}, lathe_sim=${hasLatheSim}`);
+    return hasMockPLC || hasLatheSim;
+  } catch (error: any) {
+    console.error('[Stop API] Error checking agents:', error);
+    return true; // Assume agents are running if we can't check
+  }
+}
+
+async function stopAlarmMonitor() {
+  try {
+    console.log('[Stop API] Stopping alarm monitor...');
+    await execAsync(`pkill -f "alarm_monitor.py"`).catch(() => {
+      // pkill may return non-zero if process not found, which is OK
+    });
+    // Wait a moment and force kill if still running
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await execAsync(`pkill -9 -f "alarm_monitor.py"`).catch(() => {
+      // Ignore errors
+    });
+    console.log('[Stop API] Alarm monitor stopped');
+  } catch (error: any) {
+    console.error('[Stop API] Error stopping alarm monitor:', error);
   }
 }
 

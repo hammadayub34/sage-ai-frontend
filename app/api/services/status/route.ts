@@ -72,22 +72,30 @@ async function checkProcessRunning(scriptName: string, machineId?: string): Prom
       const { stdout: pids } = await execAsync(command);
       
       if (!pids.trim()) {
+        console.log(`[Status API] No PIDs found for ${scriptName}`);
         return false;
       }
       
       // Check each PID's environment for MACHINE_ID
       const pidList = pids.trim().split('\n');
+      console.log(`[Status API] Found ${pidList.length} process(es) for ${scriptName}, checking for MACHINE_ID=${machineId}`);
+      
       for (const pid of pidList) {
         try {
           // Check if this process has the matching MACHINE_ID in its environment
           const { stdout: env } = await execAsync(`ps e -p ${pid} 2>/dev/null | tr ' ' '\\n' | grep "^MACHINE_ID=" || echo ""`);
-          if (env.includes(`MACHINE_ID=${machineId}`)) {
+          const envStr = env.trim();
+          console.log(`[Status API] PID ${pid}: MACHINE_ID=${envStr}`);
+          if (envStr.includes(`MACHINE_ID=${machineId}`)) {
+            console.log(`[Status API] ✅ Match found! PID ${pid} has MACHINE_ID=${machineId}`);
             return true;
           }
-        } catch {
+        } catch (err: any) {
+          console.log(`[Status API] Error checking PID ${pid}:`, err.message);
           // Process might have exited, continue
         }
       }
+      console.log(`[Status API] ❌ No matching process found for MACHINE_ID=${machineId}`);
       return false;
     } else {
       // For InfluxDB writer, just check if process exists

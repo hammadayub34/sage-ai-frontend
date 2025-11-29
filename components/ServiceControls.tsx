@@ -93,65 +93,40 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
     }
   };
 
-  // Fetch status with polling
-  useEffect(() => {
-    let isMounted = true;
-    let pollInterval: NodeJS.Timeout | null = null;
-
-    const fetchStatus = async () => {
-      try {
-        // Add timestamp to prevent caching
-        const response = await fetch(`/api/services/status?t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
+  // Fetch status function - only called when needed (on mount, after start/stop)
+  const fetchStatus = async () => {
+    try {
+      const response = await fetch(`/api/services/status?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStatus({
+          influxdbWriter: { running: data.influxdbWriter?.running ?? false },
+          machines: {
+            'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
+            'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
+            'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
+            'lathe01': { running: data.machines?.['lathe01']?.running ?? false },
+            'lathe02': { running: data.machines?.['lathe02']?.running ?? false },
+            'lathe03': { running: data.machines?.['lathe03']?.running ?? false },
           },
         });
-        if (response.ok && isMounted) {
-          const data = await response.json();
-          console.log('Status fetched:', data);
-          // Always update status to ensure UI reflects current state
-          setStatus({
-            influxdbWriter: { running: data.influxdbWriter?.running ?? false },
-            machines: {
-              'machine-01': { running: data.machines?.['machine-01']?.running ?? false },
-              'machine-02': { running: data.machines?.['machine-02']?.running ?? false },
-              'machine-03': { running: data.machines?.['machine-03']?.running ?? false },
-              'lathe01': { running: data.machines?.['lathe01']?.running ?? false },
-              'lathe02': { running: data.machines?.['lathe02']?.running ?? false },
-              'lathe03': { running: data.machines?.['lathe03']?.running ?? false },
-            },
-          });
-          setError(null);
-        }
-      } catch (err) {
-        if (isMounted) {
-          console.error('Error fetching status:', err);
-        }
+        setError(null);
       }
-    };
+    } catch (err) {
+      console.error('Error fetching status:', err);
+    }
+  };
 
-    // Initial fetch on mount with a small delay to ensure fresh data
-    setTimeout(() => {
-      if (isMounted) {
-        fetchStatus();
-      }
-    }, 100);
-
-    // Poll every 1 second to keep status updated more responsively
-    pollInterval = setInterval(() => {
-      if (isMounted) {
-        fetchStatus();
-      }
-    }, 1000);
-
-    return () => {
-      isMounted = false;
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, []); // Empty dependency array - only run on mount
+  // Only fetch status on mount - no continuous polling
+  // Status is also refreshed after start/stop actions via refreshStatus()
+  useEffect(() => {
+    fetchStatus();
+  }, []); // Only run on mount
 
   const getCommand = (service: 'influxdb_writer' | 'mock_plc'): string => {
     if (service === 'influxdb_writer') {
@@ -243,9 +218,9 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                 // Don't continue polling - we're done
                 return;
               } else if (attempt < 10) {
-                // Service not running yet, try again more frequently (every 500ms)
-                console.log(`Service ${service} not running yet, retrying in 500ms (attempt ${attempt + 1}/10)`);
-                setTimeout(() => refreshStatus(attempt + 1), 500);
+                // Service not running yet, try again (every 1 second)
+                console.log(`Service ${service} not running yet, retrying in 1s (attempt ${attempt + 1}/10)`);
+                setTimeout(() => refreshStatus(attempt + 1), 1000);
               } else {
                 // Max attempts reached, clear loading anyway
                 console.log(`Max attempts reached for ${service}, clearing loading state`);
@@ -259,7 +234,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                 setLoading(prev => ({ ...prev, [service]: false }));
               } else {
                 // Retry on error
-                setTimeout(() => refreshStatus(attempt + 1), 500);
+                setTimeout(() => refreshStatus(attempt + 1), 1000);
               }
             });
         };
@@ -312,9 +287,11 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
       });
 
       const data = await response.json();
+      console.log(`[Stop Service] Response for ${service}:`, data);
 
       if (response.ok && data.success) {
         setError(null);
+        console.log(`[Stop Service] ✅ Stop request successful: ${data.message}`);
         // Refresh status multiple times to catch the service stopping
         const refreshStatus = (attempt: number = 0) => {
           fetch(`/api/services/status?t=${Date.now()}`, {
@@ -351,8 +328,8 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                 console.log(`✅ Service ${service} is now stopped! Clearing loading state.`);
                 setLoading(prev => ({ ...prev, [service]: false }));
               } else if (attempt < 10) {
-                // Service still running, try again (every 500ms)
-                setTimeout(() => refreshStatus(attempt + 1), 500);
+                // Service still running, try again (every 1 second)
+                setTimeout(() => refreshStatus(attempt + 1), 1000);
               } else {
                 // Max attempts reached, clear loading anyway
                 console.log(`Max attempts reached for ${service} stop, clearing loading state`);
@@ -366,7 +343,7 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
                 setLoading(prev => ({ ...prev, [service]: false }));
               } else {
                 // Retry on error
-                setTimeout(() => refreshStatus(attempt + 1), 500);
+                setTimeout(() => refreshStatus(attempt + 1), 1000);
               }
             });
         };
@@ -484,73 +461,67 @@ export function ServiceControls({ machineId }: ServiceControlsProps) {
           )}
         </div>
 
-        {/* Step 2: Mock PLC for current machine - Only show when Writer is running */}
-        {influxdbRunning && (
-          <div className="flex items-center justify-between p-2 bg-dark-bg/50 rounded border border-dark-border">
-            <div className="flex items-center gap-3">
-              <span className="text-white font-medium">Step 2: Mock PLC ({machineId})</span>
-              <div className={`w-3 h-3 rounded-full ${machineRunning ? 'bg-sage-500 animate-pulse' : 'bg-gray-600'}`} />
-              <span className={`text-xs font-medium ${machineRunning ? 'text-sage-400' : 'text-gray-500'}`}>
-                {machineRunning ? 'Running' : 'Stopped'}
+        {/* Step 2: Mock PLC for current machine - Always show, but warn if Writer is not running */}
+        <div className="flex items-center justify-between p-2 bg-dark-bg/50 rounded border border-dark-border">
+          <div className="flex items-center gap-3">
+            <span className="text-white font-medium">Step 2: Mock PLC ({machineId})</span>
+            <div className={`w-3 h-3 rounded-full ${machineRunning ? 'bg-sage-500 animate-pulse' : 'bg-gray-600'}`} />
+            <span className={`text-xs font-medium ${machineRunning ? 'text-sage-400' : 'text-gray-500'}`}>
+              {machineRunning ? 'Running' : 'Stopped'}
+            </span>
+            {!influxdbRunning && (
+              <span className="text-xs text-yellow-400 flex items-center gap-1">
+                <WarningIcon className="w-3 h-3" />
+                Writer not running
               </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {!machineRunning && !loading.mock_plc ? (
-                <button
-                  onClick={() => startService('mock_plc')}
-                  className="bg-sage-600 hover:bg-sage-700 text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-sage-500/50"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <PlayIcon className="w-4 h-4" />
-                    Start Agent
-                  </span>
-                </button>
-              ) : machineRunning ? (
-                <button
-                  onClick={() => stopService('mock_plc')}
-                  disabled={loading.mock_plc}
-                  className="bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-red-500/50"
-                >
-                  <span className="flex items-center gap-1.5">
-                    {loading.mock_plc ? (
-                      <>
-                        <ClockIcon className="w-4 h-4" />
-                        Stopping Agent...
-                      </>
-                    ) : (
-                      <>
-                        <StopIcon className="w-4 h-4" />
-                        Stop Agent
-                      </>
-                    )}
-                  </span>
-                </button>
-              ) : loading.mock_plc ? (
-                <button
-                  disabled
-                  className="bg-sage-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ClockIcon className="w-4 h-4" />
-                    Starting Agent...
-                  </span>
-                </button>
-              ) : null}
-            </div>
+            )}
           </div>
-        )}
-
-        {/* Message when Writer is not running */}
-        {!influxdbRunning && (
-          <div className="p-2 bg-dark-bg/30 rounded border border-dark-border border-dashed">
-            <p className="text-gray-400 text-sm text-center">
-              <span className="flex items-center gap-1.5 justify-center">
-                <WarningIcon className="w-4 h-4" />
-                Start InfluxDB Writer first to enable Mock PLC agent controls
-              </span>
-            </p>
+          <div className="flex items-center gap-2">
+            {!machineRunning && !loading.mock_plc ? (
+              <button
+                onClick={() => startService('mock_plc')}
+                disabled={!influxdbRunning}
+                className="bg-sage-600 hover:bg-sage-700 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50 text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-sage-500/50"
+                title={!influxdbRunning ? "Start InfluxDB Writer first" : "Start Agent"}
+              >
+                <span className="flex items-center gap-1.5">
+                  <PlayIcon className="w-4 h-4" />
+                  Start Agent
+                </span>
+              </button>
+            ) : machineRunning ? (
+              <button
+                onClick={() => stopService('mock_plc')}
+                disabled={loading.mock_plc}
+                className="bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium transition-colors shadow-lg hover:shadow-red-500/50"
+              >
+                <span className="flex items-center gap-1.5">
+                  {loading.mock_plc ? (
+                    <>
+                      <ClockIcon className="w-4 h-4" />
+                      Stopping Agent...
+                    </>
+                  ) : (
+                    <>
+                      <StopIcon className="w-4 h-4" />
+                      Stop Agent
+                    </>
+                  )}
+                </span>
+              </button>
+            ) : loading.mock_plc ? (
+              <button
+                disabled
+                className="bg-sage-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded text-sm font-medium"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ClockIcon className="w-4 h-4" />
+                  Starting Agent...
+                </span>
+              </button>
+            ) : null}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="mt-3 pt-3 border-t border-dark-border">

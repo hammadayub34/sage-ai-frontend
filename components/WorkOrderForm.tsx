@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CloseIcon, AIIcon } from './Icons';
+import { CloseIcon, AIIcon, CheckIcon } from './Icons';
 import { formatAlarmName } from '@/lib/utils';
 import { toast } from 'react-toastify';
 
@@ -320,7 +320,8 @@ export function WorkOrderForm({
               setMaterials(fillData.workOrder.materials);
             }
 
-            setPineconeInfo(`✅ Form filled with maintenance information for ${alarmToUse}`);
+            const formattedAlarmName = formatAlarmName(alarmToUse);
+            setPineconeInfo(`Form filled for ${formattedAlarmName}`);
           } else {
             console.error('No work order data in response:', fillData);
             setPineconeInfo(fillData.error || 'No maintenance information found in Pinecone for this alarm type.');
@@ -577,11 +578,11 @@ export function WorkOrderForm({
             <button
               onClick={handleGetPineconeInfo}
               disabled={loadingPinecone || !machineId}
-              className="px-4 py-2 bg-midnight-400 hover:bg-midnight-500 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-sage-500/20 hover:bg-sage-500/30 border border-sage-500/40 text-sage-400 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               title="AI Auto Fill - Automatically fill form fields from maintenance manual"
             >
               {loadingPinecone ? (
-                'Loading...'
+                'Gathering Info...'
               ) : (
                 <>
                   <AIIcon className="w-4 h-4" />
@@ -607,26 +608,29 @@ export function WorkOrderForm({
           </div>
         </div>
 
-        {/* Pinecone Info Display */}
-        {pineconeInfo && (
-          <div className="mx-6 mb-4 p-4 bg-midnight-300/30 border border-midnight-400 rounded-lg">
-            <div className="flex items-start justify-between mb-2">
-              <h4 className="text-white font-semibold text-sm">Information from Pinecone:</h4>
-              <button
-                onClick={() => setPineconeInfo(null)}
-                className="text-gray-400 hover:text-white"
-              >
-                <CloseIcon className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="text-gray-300 text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-              {pineconeInfo}
-            </div>
-          </div>
-        )}
-
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
+          {/* Pinecone Info Display - Moved lower */}
+          {pineconeInfo && (
+            <div className="mb-6 p-3 bg-sage-500/10 border border-sage-500/30 rounded-lg">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <CheckIcon className="w-4 h-4 text-sage-400 flex-shrink-0" />
+                  <span className="text-sage-300 text-sm font-medium">
+                    {pineconeInfo}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setPineconeInfo(null)}
+                  className="text-gray-400 hover:text-white flex-shrink-0 transition-colors p-1 rounded hover:bg-dark-border"
+                  title="Close"
+                >
+                  <CloseIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-6">
             {/* Header Section */}
             <div className="grid grid-cols-2 gap-4">
