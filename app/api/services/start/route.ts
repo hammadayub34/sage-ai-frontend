@@ -73,20 +73,24 @@ async function startInfluxDBWriter() {
       // pgrep returns non-zero if not found, which is fine
     }
 
-    // Stop all running agents before starting writer
-    try {
-      await execAsync('pkill -f "mock_plc_agent.py"').catch(() => {
-        // pkill may return non-zero if no processes found, which is OK
-      });
-      console.log('Stopped all running mock PLC agents');
-    } catch {
-      // Ignore errors - agents may not be running
-    }
+    // Note: We don't stop agents when starting the writer anymore
+    // This allows workflows to start writer first, then agents
 
     // Start the service in background with better error handling
     return new Promise<NextResponse>((resolve) => {
+      // Add a timeout to ensure the Promise always resolves
+      const timeout = setTimeout(() => {
+        console.warn('[Start API] Writer start check timed out after 10 seconds, assuming it started');
+        resolve(NextResponse.json({
+          success: true,
+          message: 'InfluxDB Writer start command executed (timeout reached, assuming success)',
+        }));
+      }, 10000); // 10 second timeout for the API response
+
       exec(`cd "${PROJECT_ROOT}" && nohup bash start_influxdb_writer.sh > /tmp/influxdb_writer.log 2>&1 &`, 
         async (error) => {
+          clearTimeout(timeout); // Clear timeout if callback is called
+          
           if (error) {
             console.error('Error starting InfluxDB Writer:', error);
             resolve(NextResponse.json({
@@ -217,8 +221,19 @@ async function startMockPLC(machineId: string) {
 
     // Start the service in background with better error handling
     return new Promise<NextResponse>((resolve) => {
+      // Add a timeout to ensure the Promise always resolves
+      const timeout = setTimeout(() => {
+        console.warn(`[Start API] Mock PLC start check timed out after 10 seconds for ${machineId}, assuming it started`);
+        resolve(NextResponse.json({
+          success: true,
+          message: `Mock PLC for ${machineId} start command executed (timeout reached, assuming success)`,
+        }));
+      }, 10000); // 10 second timeout for the API response
+
       exec(`cd "${PROJECT_ROOT}" && nohup bash start_mock_plc.sh ${machineId} > /tmp/mock_plc_${machineId}.log 2>&1 &`, 
         async (error) => {
+          clearTimeout(timeout); // Clear timeout if callback is called
+          
           if (error) {
             console.error(`Error starting Mock PLC for ${machineId}:`, error);
             resolve(NextResponse.json({
