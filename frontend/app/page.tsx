@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [machineId, setMachineId] = useState('machine-01');
   const [machineType, setMachineType] = useState<'bottlefiller' | 'lathe'>('bottlefiller');
   const [workOrderFormOpen, setWorkOrderFormOpen] = useState(false);
-  const [chartTab, setChartTab] = useState<'spindle' | 'vibration'>('spindle');
+  const [chartTab, setChartTab] = useState<'spindle' | 'vibration' | 'current' | 'images'>('spindle');
   const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const queryClient = useQueryClient();
@@ -117,6 +117,26 @@ export default function Dashboard() {
               >
                 Vibration (mm/s)
               </button>
+              <button
+                onClick={() => setChartTab('current')}
+                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                  chartTab === 'current'
+                    ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Current
+              </button>
+              <button
+                onClick={() => setChartTab('images')}
+                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                  chartTab === 'images'
+                    ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Images/Video
+              </button>
             </div>
             
             {/* Chart Content */}
@@ -129,12 +149,45 @@ export default function Dashboard() {
                   timeRange="-24h"
                   machineType={machineType}
                 />
+              ) : chartTab === 'vibration' ? (
+                <div className="p-6">
+                  <VibrationChart 
+                    machineId={machineId}
+                    timeRange="-24h"
+                  />
+                </div>
+              ) : chartTab === 'current' ? (
+                <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
+                  <h3 className="heading-inter heading-inter-sm mb-4">Current Values</h3>
+                  <div className="text-yellow-400">
+                    <div className="mb-2">No data available in InfluxDB</div>
+                    <div className="text-sm text-gray-500">
+                      Time range: -1h | Machine: {machineId}
+                    </div>
+                    <div className="text-sm text-gray-500 mt-2">
+                      Make sure:
+                      <ul className="list-disc list-inside mt-1 ml-2">
+                        <li>InfluxDB is running</li>
+                        <li>Data is being written to InfluxDB</li>
+                        <li>The mock PLC agent is publishing data</li>
+                        <li>Click <span className="inline-flex items-center gap-1"><RefreshIcon className="w-3 h-3" /> Refresh Data</span> after starting services</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="p-6">
-                <VibrationChart 
-                  machineId={machineId}
-                  timeRange="-24h"
-                />
+                  <h3 className="text-lg font-semibold mb-4 text-white">Images & Video</h3>
+                  <div className="space-y-4">
+                    <div className="bg-dark-bg rounded-lg border border-dark-border p-4">
+                      <h4 className="text-md font-medium mb-2 text-gray-300">Live Video Feed</h4>
+                      <div className="aspect-video bg-dark-panel rounded border border-dark-border flex items-center justify-center">
+                        <div className="text-center text-gray-500">
+                          <p className="text-sm">Video feed will appear here</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
