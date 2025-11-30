@@ -51,6 +51,7 @@ export default function WorkOrdersPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentWeek, setCurrentWeek] = useState(new Date());
   const [filters, setFilters] = useState({
     machineId: '',
     status: '',
@@ -64,7 +65,9 @@ export default function WorkOrdersPage() {
   // Set today's date as default when switching to calendar view
   useEffect(() => {
     if (viewMode === 'calendar' && !selectedDate) {
-      setSelectedDate(new Date());
+      const today = new Date();
+      setSelectedDate(today);
+      setCurrentWeek(today);
     }
   }, [viewMode, selectedDate]);
 
@@ -197,6 +200,108 @@ export default function WorkOrdersPage() {
       }
       return newDate;
     });
+  };
+
+  // Week view helper functions
+  const getWeekStart = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day; // Sunday = 0
+    return new Date(d.setDate(diff));
+  };
+
+  const getWeekDays = (weekStart: Date) => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(weekStart);
+      day.setDate(weekStart.getDate() + i);
+      days.push(day);
+    }
+    return days;
+  };
+
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    setCurrentWeek(prev => {
+      const newDate = new Date(prev);
+      if (direction === 'prev') {
+        newDate.setDate(prev.getDate() - 7);
+      } else {
+        newDate.setDate(prev.getDate() + 7);
+      }
+      return newDate;
+    });
+  };
+
+  // Get work orders for a specific day and time range
+  const getWorkOrdersForDay = (date: Date) => {
+    const dateKey = formatDateKey(date);
+    const orders = workOrdersByDate[dateKey] || [];
+    return orders.map((order, idx) => {
+      // Always default to 1 PM (13:00) for all work orders since we don't have proper time data yet
+      const defaultHour = 13;
+      const defaultMinute = 0;
+      
+      // Use 1 PM + small offset for multiple orders on the same day
+      let hour = defaultHour;
+      let minute = defaultMinute + (idx * 15); // Add 15 minutes per order to stack them
+      
+      // Handle minute overflow
+      if (minute >= 60) {
+        hour += Math.floor(minute / 60);
+        minute = minute % 60;
+      }
+      
+      // Make sure we don't go past 8 PM (20:00)
+      if (hour >= 21) {
+        hour = 20;
+        minute = 45;
+      }
+      
+      // Create a new date with the time set
+      const timeDate = new Date(date);
+      timeDate.setHours(hour, minute, 0, 0);
+      
+      return {
+        ...order,
+        hour: hour,
+        minute: minute,
+        time: timeDate,
+      };
+    }).sort((a, b) => a.time.getTime() - b.time.getTime());
+  };
+
+  // Calculate position for work order block in pixels
+  // Each hour slot is 64px (h-16 = 4rem = 64px)
+  const HOUR_HEIGHT = 64;
+  const START_HOUR = 8;
+  
+  const getWorkOrderPosition = (hour: number, minute: number) => {
+    const startHour = START_HOUR;
+    const totalMinutes = (hour - startHour) * 60 + minute;
+    // Position in pixels: each hour is 64px, each minute is 64/60 px
+    const position = (totalMinutes / 60) * HOUR_HEIGHT;
+    return Math.max(0, position);
+  };
+
+  const getWorkOrderHeight = (standardHours: number) => {
+    // Always 1 hour height (64px)
+    return HOUR_HEIGHT;
+  };
+
+  // Get current time position
+  const getCurrentTimePosition = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    return getWorkOrderPosition(hour, minute);
+  };
+
+  const isCurrentWeek = () => {
+    const today = new Date();
+    const weekStart = getWeekStart(currentWeek);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return today >= weekStart && today <= weekEnd;
   };
 
   const handleDelete = async (workOrderNo: string, e: React.MouseEvent) => {
@@ -361,183 +466,386 @@ export default function WorkOrdersPage() {
               <span className="ml-3 text-gray-400">Loading work orders...</span>
             </div>
           ) : (
-            <div className="flex gap-6 h-[calc(100vh-250px)]">
-          {/* Calendar */}
-          <div className="flex-1 bg-dark-panel border border-dark-border rounded-lg p-6 flex flex-col">
-            {/* Calendar Header */}
-            <div className="flex items-center justify-between mb-4 flex-shrink-0">
-              <button
-                onClick={() => navigateMonth('prev')}
-                className="p-2 hover:bg-dark-border rounded transition-colors text-gray-400 hover:text-white"
-              >
-                <ChevronRightIcon className="w-5 h-5 rotate-180" />
-              </button>
-              <h2 className="text-white font-semibold text-lg">
-                {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </h2>
-              <button
-                onClick={() => navigateMonth('next')}
-                className="p-2 hover:bg-dark-border rounded transition-colors text-gray-400 hover:text-white"
-              >
-                <ChevronRightIcon className="w-5 h-5" />
-              </button>
-            </div>
+            <div className="flex gap-4 h-[calc(100vh-250px)]">
+              {/* Left Sidebar - Mini Calendar & Filters */}
+              <div className="w-64 bg-dark-panel border border-dark-border rounded-lg p-4 flex flex-col gap-4 overflow-y-auto">
+                {/* Mini Calendar */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      onClick={() => navigateMonth('prev')}
+                      className="p-1 hover:bg-dark-border rounded transition-colors text-gray-400 hover:text-white"
+                    >
+                      <ChevronRightIcon className="w-4 h-4 rotate-180" />
+                    </button>
+                    <h3 className="text-white font-semibold text-sm">
+                      {currentMonth.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                    </h3>
+                    <button
+                      onClick={() => navigateMonth('next')}
+                      className="p-1 hover:bg-dark-border rounded transition-colors text-gray-400 hover:text-white"
+                    >
+                      <ChevronRightIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  {/* Mini Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (
+                      <div key={day} className="text-center text-gray-500 text-xs font-medium py-1">
+                        {day}
+                      </div>
+                    ))}
+                    {Array.from({ length: getFirstDayOfMonth(currentMonth) }).map((_, idx) => (
+                      <div key={`empty-${idx}`} />
+                    ))}
+                    {Array.from({ length: getDaysInMonth(currentMonth) }).map((_, idx) => {
+                      const day = idx + 1;
+                      const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                      const dateKey = formatDateKey(date);
+                      const hasOrders = hasWorkOrders(date);
+                      const isSelectedDay = isSelected(date);
+                      const isTodayDay = isToday(date);
+                      const weekStart = getWeekStart(currentWeek);
+                      const weekDays = getWeekDays(weekStart);
+                      const isInCurrentWeek = weekDays.some(d => d.toDateString() === date.toDateString());
 
-            {/* Calendar Grid - Compact to fit on screen */}
-            <div className="grid grid-cols-7 gap-1.5 flex-1 auto-rows-fr">
-              {/* Day Headers */}
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="text-center text-gray-500 text-xs font-medium py-1">
-                  {day}
+                      return (
+                        <button
+                          key={day}
+                          onClick={() => {
+                            handleDateClick(date);
+                            setCurrentWeek(date);
+                          }}
+                          className={`text-xs p-1 rounded transition-all ${
+                            isSelectedDay
+                              ? 'bg-sage-500 text-white'
+                              : isTodayDay
+                              ? 'bg-sage-500/30 text-sage-400 font-semibold'
+                              : hasOrders
+                              ? 'bg-sage-500/10 text-sage-400 hover:bg-sage-500/20'
+                              : isInCurrentWeek
+                              ? 'bg-dark-border/50 text-gray-300 hover:bg-dark-border'
+                              : 'text-gray-400 hover:bg-dark-border'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
 
-              {/* Empty cells for days before month starts */}
-              {Array.from({ length: getFirstDayOfMonth(currentMonth) }).map((_, idx) => (
-                <div key={`empty-${idx}`} />
-              ))}
+                {/* My Work Orders Section */}
+                <div>
+                  <h4 className="text-white font-semibold text-sm mb-3">My Work Orders</h4>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        readOnly
+                        className="w-4 h-4 rounded border-dark-border bg-dark-bg text-sage-500 focus:ring-sage-500"
+                      />
+                      <span className="text-sm text-gray-300">All Work Orders</span>
+                    </label>
+                  </div>
+                </div>
 
-              {/* Calendar Days */}
-              {Array.from({ length: getDaysInMonth(currentMonth) }).map((_, idx) => {
-                const day = idx + 1;
-                const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                const dateKey = formatDateKey(date);
-                const hasOrders = hasWorkOrders(date);
-                const orderCount = workOrdersByDate[dateKey]?.length || 0;
-                const isSelectedDay = isSelected(date);
-                const isTodayDay = isToday(date);
-
-                return (
-                  <button
-                    key={day}
-                    onClick={() => handleDateClick(date)}
-                    className={`rounded-lg border-2 transition-all relative flex flex-col items-center justify-center p-1 min-h-[60px] ${
-                      isSelectedDay
-                        ? 'border-sage-400 bg-sage-500/20'
-                        : hasOrders
-                        ? 'border-sage-500/50 bg-sage-500/10 hover:bg-sage-500/20'
-                        : 'border-dark-border hover:border-midnight-300'
-                    } ${isTodayDay && !isSelectedDay ? 'ring-2 ring-sage-400/50' : ''}`}
-                  >
-                    <div className={`text-sm font-medium ${
-                      isSelectedDay ? 'text-white' : hasOrders ? 'text-sage-400' : 'text-gray-400'
-                    }`}>
-                      {day}
+                {/* Filters Section */}
+                <div>
+                  <h4 className="text-white font-semibold text-sm mb-3">Filters</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1 block">Machine</label>
+                      <input
+                        type="text"
+                        value={filters.machineId}
+                        onChange={(e) => setFilters({ ...filters, machineId: e.target.value })}
+                        placeholder="All machines"
+                        className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                      />
                     </div>
-                    {hasOrders && (
-                      <div className="mt-auto">
-                        <div className="w-1.5 h-1.5 rounded-full bg-sage-400"></div>
-                      </div>
-                    )}
-                    {orderCount > 1 && (
-                      <div className="absolute top-1 right-1">
-                        <span className="text-xs text-sage-400 font-semibold">{orderCount}</span>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Selected Date Work Orders Sidebar - Right */}
-          {selectedDate && (
-            <div className="w-96 bg-dark-panel border border-dark-border rounded-lg p-6 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-semibold text-lg">
-                  {selectedDate.toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </h3>
-                <button
-                  onClick={() => setSelectedDate(null)}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  ×
-                </button>
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1 block">Status</label>
+                      <select
+                        value={filters.status}
+                        onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                        className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-sage-500"
+                      >
+                        <option value="">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1 block">Priority</label>
+                      <select
+                        value={filters.priority}
+                        onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
+                        className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-sage-500"
+                      >
+                        <option value="">All</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                        <option value="Critical">Critical</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {selectedDateOrders.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <p>No work orders for this date</p>
+              {/* Main Calendar Grid - Weekly View */}
+              <div className="flex-1 bg-dark-panel border border-dark-border rounded-lg flex flex-col overflow-hidden">
+                {/* Week Header */}
+                <div className="flex items-center justify-between p-4 border-b border-dark-border flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => navigateWeek('prev')}
+                      className="p-2 hover:bg-dark-border rounded transition-colors text-gray-400 hover:text-white"
+                    >
+                      <ChevronRightIcon className="w-5 h-5 rotate-180" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCurrentWeek(new Date());
+                        setSelectedDate(new Date());
+                      }}
+                      className="px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-dark-border rounded transition-colors"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => navigateWeek('next')}
+                      className="p-2 hover:bg-dark-border rounded transition-colors text-gray-400 hover:text-white"
+                    >
+                      <ChevronRightIcon className="w-5 h-5" />
+                    </button>
+                    <h2 className="text-white font-semibold text-lg ml-2">
+                      {getWeekStart(currentWeek).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} -{' '}
+                      {new Date(getWeekStart(currentWeek).getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </h2>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-3 flex-1 overflow-y-auto">
-                  {selectedDateOrders.map((order) => {
-                    const isExpanded = expandedOrders.has(order.workOrderNo);
-                    return (
-                      <div
-                        key={order.workOrderNo}
-                        className="bg-dark-bg border border-dark-border rounded-lg p-4"
-                      >
-                        <div
-                          className="cursor-pointer"
-                          onClick={() => toggleExpand(order.workOrderNo)}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              {isExpanded ? (
-                                <ChevronDownIcon className="w-4 h-4 text-gray-400" />
-                              ) : (
-                                <ChevronRightIcon className="w-4 h-4 text-gray-400" />
-                              )}
-                              <span className="text-white font-semibold">{order.workOrderNo}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`px-2 py-0.5 rounded text-xs font-medium border ${getPriorityColor(order.priority)}`}
-                              >
-                                {order.priority}
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(order.status)}`}
-                              >
-                                {order.status.charAt(0).toUpperCase() + order.status.slice(1).toLowerCase()}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-sm text-gray-400">
-                            <span className="font-semibold text-gray-300">Machine:</span> {order.machineId}
-                            {order.alarmType && (
-                              <>
-                                {' • '}
-                                <span className="font-semibold text-gray-300">Alarm:</span> {formatAlarmName(order.alarmType)}
-                              </>
-                            )}
+
+                {/* Calendar Grid */}
+                <div className="flex-1 overflow-auto relative">
+                  {/* Time Column */}
+                  <div className="flex">
+                    <div className="w-20 flex-shrink-0 border-r border-dark-border relative">
+                      {/* Empty space for day headers */}
+                      <div className="h-12 border-b border-dark-border"></div>
+                      
+                      {/* Time slots */}
+                      {Array.from({ length: 13 }, (_, i) => i + 8).map(hour => (
+                        <div key={hour} className="h-16 border-b border-dark-border/30 relative flex items-start">
+                          <div className="text-xs text-gray-500 px-2 pt-0.5 w-full text-right">
+                            {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                           </div>
                         </div>
+                      ))}
+                    </div>
 
-                        {/* Expanded details in sidebar - simplified */}
-                        {isExpanded && (
-                          <div className="mt-3 pt-3 border-t border-dark-border space-y-2 text-sm">
-                            {order.workDescription && (
-                              <div>
-                                <span className="text-gray-400">Description:</span>
-                                <p className="text-gray-300 mt-1">{order.workDescription.substring(0, 150)}...</p>
+                    {/* Days Grid */}
+                    <div className="flex-1 grid grid-cols-7">
+                      {getWeekDays(getWeekStart(currentWeek)).map((day, dayIdx) => {
+                        const dayOrders = getWorkOrdersForDay(day);
+                        const isTodayDay = isToday(day);
+                        const isSelectedDay = isSelected(day);
+
+                        return (
+                          <div
+                            key={dayIdx}
+                            className={`border-r border-dark-border last:border-r-0 ${
+                              isSelectedDay ? 'bg-sage-500/5' : ''
+                            }`}
+                          >
+                            {/* Day Header */}
+                            <div
+                              className={`h-12 border-b border-dark-border p-2 cursor-pointer hover:bg-dark-border/50 transition-colors ${
+                                isTodayDay ? 'bg-sage-500/20' : ''
+                              }`}
+                              onClick={() => handleDateClick(day)}
+                            >
+                              <div className="text-xs text-gray-500 mb-0.5">
+                                {day.toLocaleDateString('en-US', { weekday: 'short' })}
                               </div>
-                            )}
-                            <div className="flex items-center gap-4 text-gray-400">
-                              <span>
-                                <span className="font-semibold text-gray-300">Hours:</span> {order.standardHours}
-                              </span>
-                              {order.parts && order.parts.length > 0 && (
-                                <span>
-                                  <span className="font-semibold text-gray-300">Parts:</span> {order.parts.length}
-                                </span>
-                              )}
+                              <div className={`text-sm font-semibold ${
+                                isTodayDay ? 'text-sage-400' : isSelectedDay ? 'text-white' : 'text-gray-300'
+                              }`}>
+                                {day.getDate()}
+                              </div>
+                            </div>
+
+                              {/* Time Slots */}
+                              <div className="relative">
+                                {Array.from({ length: 13 }, (_, i) => i + 8).map(hour => (
+                                  <div
+                                    key={hour}
+                                    className="h-16 border-b border-dark-border/30 relative"
+                                  />
+                                ))}
+                                
+                                {/* Current Time Indicator - Shows across all days in current week */}
+                                {isTodayDay && isCurrentWeek() && (() => {
+                                  const now = new Date();
+                                  const currentHour = now.getHours();
+                                  const currentMinute = now.getMinutes();
+                                  if (currentHour >= 8 && currentHour < 21) {
+                                    const hourIndex = currentHour - 8;
+                                    const minutePosition = (currentMinute / 60) * 100;
+                                    const topPosition = hourIndex * 64 + (minutePosition / 100) * 64; // 64px per hour (h-16 = 4rem = 64px)
+                                    return (
+                                      <div
+                                        className="absolute left-0 right-0 z-10 pointer-events-none"
+                                        style={{
+                                          top: `${topPosition}px`,
+                                        }}
+                                      >
+                                        <div className="relative">
+                                          <div className="absolute -left-1.5 w-3 h-3 bg-red-500 rounded-full border-2 border-dark-bg z-10"></div>
+                                          <div className="h-0.5 bg-red-500"></div>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+
+                              {/* Work Order Blocks */}
+                              {dayOrders.map((order, orderIdx) => {
+                                const topPx = getWorkOrderPosition(order.hour, order.minute);
+                                const heightPx = getWorkOrderHeight(order.standardHours || 1);
+                                
+                                // Calculate left position and width for overlapping orders
+                                const totalOrders = dayOrders.length;
+                                const maxOverlap = Math.min(3, totalOrders);
+                                const orderWidth = 100 / maxOverlap;
+                                const leftPercent = (orderIdx % maxOverlap) * orderWidth;
+                                const widthPercent = orderWidth - 1; // Small gap between overlapping orders
+
+                                return (
+                                  <div
+                                    key={order.workOrderNo}
+                                    className="absolute rounded px-2 py-1 text-xs cursor-pointer hover:opacity-90 transition-opacity bg-gray-500/20 border border-gray-500/30 text-gray-300 overflow-hidden flex flex-col"
+                                    style={{
+                                      top: `${topPx}px`,
+                                      height: `${heightPx}px`,
+                                      left: `${leftPercent}%`,
+                                      width: `${widthPercent}%`,
+                                      minHeight: '48px', // Minimum 3/4 hour
+                                    }}
+                                    onClick={() => {
+                                      setSelectedDate(day);
+                                      toggleExpand(order.workOrderNo);
+                                    }}
+                                  >
+                                    <div className="font-semibold truncate text-white">{order.workOrderNo}</div>
+                                    <div className="text-xs opacity-70 truncate text-gray-300">
+                                      {order.machineId}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Sidebar - Selected Date Work Orders */}
+              {selectedDate && (
+                <div className="w-80 bg-dark-panel border border-dark-border rounded-lg p-4 flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-semibold text-sm">
+                      {selectedDate.toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedDate(null)}
+                      className="text-gray-400 hover:text-white transition-colors text-xl leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {selectedDateOrders.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 text-sm">
+                      <p>No work orders</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 flex-1 overflow-y-auto">
+                      {selectedDateOrders.map((order) => {
+                        const isExpanded = expandedOrders.has(order.workOrderNo);
+                        const orderTime = new Date(order.createdAt);
+                        return (
+                          <div
+                            key={order.workOrderNo}
+                            className="bg-dark-bg border border-dark-border rounded-lg p-3"
+                          >
+                            <div
+                              className="cursor-pointer"
+                              onClick={() => toggleExpand(order.workOrderNo)}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  {isExpanded ? (
+                                    <ChevronDownIcon className="w-3 h-3 text-gray-400" />
+                                  ) : (
+                                    <ChevronRightIcon className="w-3 h-3 text-gray-400" />
+                                  )}
+                                  <span className="text-white font-semibold text-sm">{order.workOrderNo}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-xs font-medium border ${getPriorityColor(order.priority)}`}
+                                  >
+                                    {order.priority}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-400 mb-1">
+                                {orderTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                <span className="font-semibold text-gray-300">Machine:</span> {order.machineId}
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="mt-2 pt-2 border-t border-dark-border space-y-1.5 text-xs">
+                                {order.workDescription && (
+                                  <div>
+                                    <span className="text-gray-400">Description:</span>
+                                    <p className="text-gray-300 mt-0.5">{order.workDescription.substring(0, 100)}...</p>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3 text-gray-400">
+                                  <span>
+                                    <span className="font-semibold text-gray-300">Hours:</span> {order.standardHours}
+                                  </span>
+                                  {order.parts && order.parts.length > 0 && (
+                                    <span>
+                                      <span className="font-semibold text-gray-300">Parts:</span> {order.parts.length}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
             </div>
           )}
         </>

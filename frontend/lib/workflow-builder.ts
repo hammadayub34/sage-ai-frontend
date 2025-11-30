@@ -110,10 +110,40 @@ export function buildWorkflow(definition: WorkflowDefinition, onLog?: (message: 
     logBoth(`   Config: ${JSON.stringify(node.data.config || {})}`);
     logBoth(`   Current State: machineId=${state.machineId}, hasAlarmData=${!!state.alarmData}, hasPineconeData=${!!state.pineconeData}, hasWorkOrderData=${!!state.workOrderData}`);
 
+    // Additional terminal logging for debugging
+    console.log(`\n🔄 [WORKFLOW BUILDER] About to execute node: ${nodeId}`);
+    console.log('   Node details:', {
+      id: nodeId,
+      type: toolType,
+      label: node.data.config?.label || toolType,
+      config: node.data.config || {},
+    });
+    console.log('   State before execution:', {
+      machineId: state.machineId,
+      hasAlarmData: !!state.alarmData,
+      hasPineconeData: !!state.pineconeData,
+      hasWorkOrderData: !!state.workOrderData,
+      executionLogLength: state.executionLog?.length || 0,
+    });
+
     // Execute the tool
     const startTime = Date.now();
+    console.log('   ⏱️  [WORKFLOW BUILDER] Tool execution started at:', new Date().toISOString());
+    
     // Pass logBoth to tool if it accepts it (tools now accept optional third parameter)
-    const updatedState = await (tool as any)(state, node.data.config || {}, logBoth);
+    let updatedState: WorkflowState;
+    try {
+      updatedState = await (tool as any)(state, node.data.config || {}, logBoth);
+      const duration = Date.now() - startTime;
+      console.log(`   ⏱️  [WORKFLOW BUILDER] Tool execution completed in ${duration}ms`);
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`   ❌ [WORKFLOW BUILDER] Tool execution failed after ${duration}ms`);
+      console.error('      Error:', error.message);
+      console.error('      Stack:', error.stack);
+      throw error;
+    }
+    
     const duration = Date.now() - startTime;
     
     // Log node completion

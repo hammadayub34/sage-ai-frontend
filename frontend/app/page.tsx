@@ -17,6 +17,8 @@ export default function Dashboard() {
   const [machineType, setMachineType] = useState<'bottlefiller' | 'lathe'>('bottlefiller');
   const [workOrderFormOpen, setWorkOrderFormOpen] = useState(false);
   const [chartTab, setChartTab] = useState<'spindle' | 'vibration'>('spindle');
+  const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const queryClient = useQueryClient();
   
   const handleRefresh = () => {
@@ -51,26 +53,26 @@ export default function Dashboard() {
         {/* Machine Type and Selection */}
         <div className="flex items-center justify-between gap-4 mt-4">
           <div className="flex items-center gap-4">
-          <label className="text-gray-400">Machine Type:</label>
-          <select
-            value={machineType}
-            onChange={handleMachineTypeChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
-          >
-            <option value="bottlefiller">Bottle Filler</option>
-            <option value="lathe">CNC Lathe</option>
-          </select>
-          
-          <label className="text-gray-400">Machine ID:</label>
-          <select
-            value={machineId}
-            onChange={handleMachineChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
-          >
-            {machineOptions.map(id => (
-              <option key={id} value={id}>{id}</option>
-            ))}
-          </select>
+            <label className="text-gray-400">Machine Type:</label>
+            <select
+              value={machineType}
+              onChange={handleMachineTypeChange}
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
+            >
+              <option value="bottlefiller">Bottle Filler</option>
+              <option value="lathe">CNC Lathe</option>
+            </select>
+            
+            <label className="text-gray-400">Machine ID:</label>
+            <select
+              value={machineId}
+              onChange={handleMachineChange}
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
+            >
+              {machineOptions.map(id => (
+                <option key={id} value={id}>{id}</option>
+              ))}
+            </select>
             
             <button
               onClick={() => setWorkOrderFormOpen(true)}
@@ -84,7 +86,7 @@ export default function Dashboard() {
             className="bg-midnight-300 hover:bg-midnight-400 text-dark-text border border-dark-border p-2 rounded transition-colors flex items-center justify-center"
             title="Refresh Data"
           >
-              <RefreshIcon className="w-4 h-4" />
+            <RefreshIcon className="w-4 h-4" />
           </button>
         </div>
       </div>

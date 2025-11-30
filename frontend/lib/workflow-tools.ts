@@ -35,25 +35,53 @@ export async function startAgentTool(
 ): Promise<WorkflowState> {
   const log = state.executionLog || [];
   log.push(`🔧 Starting ${config.service} for ${config.machineId}...`);
+  
+  // Terminal logging for debugging
+  console.log('\n🔧 [AGENT TOOL] startAgentTool called');
+  console.log('   Config:', JSON.stringify(config, null, 2));
+  console.log('   Current State:', {
+    machineId: state.machineId,
+    hasAlarmData: !!state.alarmData,
+    hasPineconeData: !!state.pineconeData,
+  });
+  
   if (logBoth) logBoth(`   🔧 [TOOL] startAgentTool called`);
   if (logBoth) logBoth(`      Service: ${config.service}, Machine: ${config.machineId}`);
 
   try {
     const baseUrl = getBaseUrl();
+    const requestBody = {
+      service: config.service === 'mock_plc' ? 'mock_plc' : 'influxdb_writer',
+      machineId: config.machineId,
+    };
+    
+    console.log('   📡 [AGENT TOOL] Making API call to start service');
+    console.log('      URL:', `${baseUrl}/api/services/start`);
+    console.log('      Method: POST');
+    console.log('      Body:', JSON.stringify(requestBody, null, 2));
+    
     if (logBoth) logBoth(`      Calling: ${baseUrl}/api/services/start`);
     const response = await fetch(`${baseUrl}/api/services/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service: config.service === 'mock_plc' ? 'mock_plc' : 'influxdb_writer',
-        machineId: config.machineId,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
+    console.log('   📥 [AGENT TOOL] Response received');
+    console.log('      Status:', response.status, response.statusText);
+    console.log('      OK:', response.ok);
+
     const result = await response.json();
+    console.log('   📋 [AGENT TOOL] Response body:', JSON.stringify(result, null, 2));
 
     if (response.ok) {
       log.push(`✅ Agent started successfully`);
+      console.log('   ✅ [AGENT TOOL] Agent started successfully');
+      console.log('   📊 [AGENT TOOL] Updated state:', {
+        machineId: config.machineId,
+        previousMachineId: state.machineId,
+      });
+      
       if (logBoth) logBoth(`      ✅ Result: Agent started successfully`);
       return {
         ...state,
@@ -61,11 +89,16 @@ export async function startAgentTool(
         executionLog: log,
       };
     } else {
+      console.error('   ❌ [AGENT TOOL] Failed to start agent');
+      console.error('      Error:', result.error);
       if (logBoth) logBoth(`      ❌ Result: Failed - ${result.error}`);
       throw new Error(result.error || 'Failed to start agent');
     }
   } catch (error: any) {
     log.push(`❌ Error starting agent: ${error.message}`);
+    console.error('   ❌ [AGENT TOOL] Exception caught');
+    console.error('      Error message:', error.message);
+    console.error('      Error stack:', error.stack);
     if (logBoth) logBoth(`      ❌ Error: ${error.message}`);
     throw error;
   }

@@ -79,6 +79,14 @@ export default function WorkflowsPage() {
       return;
     }
 
+    console.log('\n🚀 [WORKFLOW] Starting workflow execution from UI');
+    console.log('   Workflow summary:', {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      nodes: nodes.map(n => ({ id: n.id, type: n.data.type, label: n.data.label })),
+      edges: edges.map(e => ({ from: e.source, to: e.target })),
+    });
+
     setIsRunning(true);
     setExecutionLog(['Starting workflow execution...']);
 
@@ -209,12 +217,21 @@ export default function WorkflowsPage() {
                     { x: 700, y: 200 },
                     { x: 900, y: 200 },
                   ];
-                  setNodes(EXAMPLE_WORKFLOW.nodes.map((n, idx) => ({
+                  const newNodes = EXAMPLE_WORKFLOW.nodes.map((n, idx) => ({
                     ...n,
                     type: 'tool-node',
                     position: nodePositions[idx] || { x: 100 + idx * 200, y: 200 },
-                  })));
-                  setEdges(EXAMPLE_WORKFLOW.edges);
+                  }));
+                  const newEdges = EXAMPLE_WORKFLOW.edges;
+                  
+                  console.log('📋 [WORKFLOW] Loading example workflow');
+                  console.log('   Nodes:', newNodes.map(n => ({ id: n.id, type: n.data.type, label: n.data.label })));
+                  console.log('   Edges:', newEdges.map(e => ({ from: e.source, to: e.target })));
+                  console.log('   Total nodes:', newNodes.length);
+                  console.log('   Total edges:', newEdges.length);
+                  
+                  setNodes(newNodes);
+                  setEdges(newEdges);
                   setExecutionLog([]);
                 }}
                 className="px-4 py-2 rounded text-sm font-medium bg-midnight-400 hover:bg-midnight-500 text-white transition-colors"
@@ -223,6 +240,9 @@ export default function WorkflowsPage() {
               </button>
               <button
                 onClick={() => {
+                  console.log('🗑️  [WORKFLOW] Clearing workflow');
+                  console.log('   Removed', nodes.length, 'node(s)');
+                  console.log('   Removed', edges.length, 'edge(s)');
                   setNodes([]);
                   setEdges([]);
                   setExecutionLog([]);
@@ -303,7 +323,11 @@ export default function WorkflowsPage() {
                   label: node.name,
                   config: newNode.data.config,
                 });
-                setNodes(prev => [...prev, newNode]);
+                setNodes(prev => {
+                  const updated = [...prev, newNode];
+                  console.log('   Total nodes in workflow:', updated.length);
+                  return updated;
+                });
               }} />
             </div>
 
