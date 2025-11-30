@@ -110,7 +110,7 @@ export default function AlarmEventsPage() {
   return (
     <div className="bg-dark-bg text-dark-text p-6 min-h-screen">
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-start mb-4">
           <div className="flex items-center gap-3">
             <AlarmEventsIcon className="w-8 h-8 text-sage-400" />
             <h1 className="heading-inter heading-inter-lg">Alarm Events</h1>
