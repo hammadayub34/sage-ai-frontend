@@ -237,7 +237,7 @@ export default function AlarmEventsPage() {
                             machineType={getMachineType(alert.machine_id)}
                             state={alert.state}
                             machineId={alert.machine_id}
-                            onClose={null}
+                            onClose={undefined}
                           />
                         </div>
                       </div>

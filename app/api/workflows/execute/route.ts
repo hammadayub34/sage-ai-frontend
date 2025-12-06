@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     // These will be logged to terminal and UI (if streaming)
     const initialLogs: string[] = [];
     initialLogs.push('\n🚀 [WORKFLOW] Execution started');
-    initialLogs.push(`📊 [WORKFLOW] Nodes: ${nodes.map(n => `${n.data.label || n.data.type} (${n.id})`).join(', ')}`);
-    initialLogs.push(`🔗 [WORKFLOW] Edges: ${edges.map(e => `${e.source} → ${e.target}`).join(', ')}`);
+    initialLogs.push(`📊 [WORKFLOW] Nodes: ${nodes.map((n: any) => `${n.data.label || n.data.type} (${n.id})`).join(', ')}`);
+    initialLogs.push(`🔗 [WORKFLOW] Edges: ${edges.map((e: any) => `${e.source} → ${e.target}`).join(', ')}`);
     
     // Log to terminal
     console.log(initialLogs[0]);

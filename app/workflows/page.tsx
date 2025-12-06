@@ -16,6 +16,7 @@ export default function WorkflowsPage() {
   const [edges, setEdges] = useState<any[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const [canvasHeight, setCanvasHeight] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -297,38 +298,188 @@ export default function WorkflowsPage() {
                   <WorkflowCanvas
                     nodes={nodes}
                     edges={edges}
-                    onNodesChange={setNodes}
+                    onNodesChange={(updatedNodes) => {
+                      setNodes(updatedNodes);
+                      // Update selected node if it was modified
+                      if (selectedNode) {
+                        const updated = updatedNodes.find(n => n.id === selectedNode.id);
+                        if (updated) setSelectedNode(updated);
+                      }
+                    }}
                     onEdgesChange={setEdges}
+                    onNodeClick={(node) => setSelectedNode(node)}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Node Palette - right side */}
+            {/* Node Configuration Panel or Node Palette */}
             <div className="w-64 bg-dark-panel border-l border-dark-border overflow-y-auto">
-              <NodePalette onAddNode={(node) => {
-                const newNode = {
-                  id: `node-${Date.now()}`,
-                  type: 'tool-node',
-                  position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
-                  data: {
+              {selectedNode ? (
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-medium text-sm">Node Configuration</h3>
+                    <button
+                      onClick={() => setSelectedNode(null)}
+                      className="text-gray-400 hover:text-white text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1 block">Node Type</label>
+                      <div className="text-white text-sm">{selectedNode.data.label}</div>
+                    </div>
+                    {selectedNode.data.type === 'startAgent' && (
+                      <div>
+                        <label className="text-gray-400 text-xs mb-1 block">Machine</label>
+                        <select
+                          value={selectedNode.data.config?.machineId || ''}
+                          onChange={(e) => {
+                            const updatedNodes = nodes.map(n =>
+                              n.id === selectedNode.id
+                                ? {
+                                    ...n,
+                                    data: {
+                                      ...n.data,
+                                      config: {
+                                        ...n.data.config,
+                                        machineId: e.target.value,
+                                      },
+                                    },
+                                  }
+                                : n
+                            );
+                            setNodes(updatedNodes);
+                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                          }}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                        >
+                          <option value="">Select a machine...</option>
+                          <option value="machine-01">machine-01 (Bottle Filler)</option>
+                          <option value="machine-02">machine-02 (Bottle Filler)</option>
+                          <option value="machine-03">machine-03 (Bottle Filler)</option>
+                          <option value="lathe01">lathe01 (Lathe)</option>
+                          <option value="lathe02">lathe02 (Lathe)</option>
+                          <option value="lathe03">lathe03 (Lathe)</option>
+                        </select>
+                      </div>
+                    )}
+                    {selectedNode.data.type === 'queryPinecone' && (
+                      <div>
+                        <label className="text-gray-400 text-xs mb-1 block">Prompt</label>
+                        <textarea
+                          value={selectedNode.data.config?.prompt || ''}
+                          onChange={(e) => {
+                            const updatedNodes = nodes.map(n =>
+                              n.id === selectedNode.id
+                                ? {
+                                    ...n,
+                                    data: {
+                                      ...n.data,
+                                      config: {
+                                        ...n.data.config,
+                                        prompt: e.target.value,
+                                      },
+                                    },
+                                  }
+                                : n
+                            );
+                            setNodes(updatedNodes);
+                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                          }}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500 resize-none"
+                          rows={4}
+                          placeholder="Enter your question or analysis request here..."
+                        />
+                      </div>
+                    )}
+                    {selectedNode.data.type !== 'startAgent' && selectedNode.data.config?.machineId && (
+                      <div>
+                        <label className="text-gray-400 text-xs mb-1 block">Machine ID</label>
+                        <input
+                          type="text"
+                          value={selectedNode.data.config.machineId}
+                          onChange={(e) => {
+                            const updatedNodes = nodes.map(n =>
+                              n.id === selectedNode.id
+                                ? {
+                                    ...n,
+                                    data: {
+                                      ...n.data,
+                                      config: {
+                                        ...n.data.config,
+                                        machineId: e.target.value,
+                                      },
+                                    },
+                                  }
+                                : n
+                            );
+                            setNodes(updatedNodes);
+                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                          }}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                        />
+                      </div>
+                    )}
+                    {selectedNode.data.config?.machineType && (
+                      <div>
+                        <label className="text-gray-400 text-xs mb-1 block">Machine Type</label>
+                        <select
+                          value={selectedNode.data.config.machineType}
+                          onChange={(e) => {
+                            const updatedNodes = nodes.map(n =>
+                              n.id === selectedNode.id
+                                ? {
+                                    ...n,
+                                    data: {
+                                      ...n.data,
+                                      config: {
+                                        ...n.data.config,
+                                        machineType: e.target.value,
+                                      },
+                                    },
+                                  }
+                                : n
+                            );
+                            setNodes(updatedNodes);
+                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                          }}
+                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                        >
+                          <option value="bottlefiller">Bottle Filler</option>
+                          <option value="lathe">Lathe</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <NodePalette onAddNode={(node) => {
+                  const newNode = {
+                    id: `node-${Date.now()}`,
+                    type: 'tool-node',
+                    position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
+                    data: {
+                      type: node.type,
+                      config: node.config || {},
+                      label: node.name,
+                    },
+                  };
+                  console.log('📦 [WORKFLOW] Node created:', {
+                    id: newNode.id,
                     type: node.type,
-                    config: node.config || {},
                     label: node.name,
-                  },
-                };
-                console.log('📦 [WORKFLOW] Node created:', {
-                  id: newNode.id,
-                  type: node.type,
-                  label: node.name,
-                  config: newNode.data.config,
-                });
-                setNodes(prev => {
-                  const updated = [...prev, newNode];
-                  console.log('   Total nodes in workflow:', updated.length);
-                  return updated;
-                });
-              }} />
+                    config: newNode.data.config,
+                  });
+                  setNodes(prev => {
+                    const updated = [...prev, newNode];
+                    console.log('   Total nodes in workflow:', updated.length);
+                    return updated;
+                  });
+                }} />
+              )}
             </div>
 
             {/* Resize Handle */}

@@ -13,7 +13,7 @@ const NODE_TYPES: NodeType[] = [
     name: 'Start Agent',
     type: 'startAgent',
     description: 'Start a mock PLC agent or InfluxDB writer',
-    config: { machineId: 'machine-01', service: 'mock_plc' },
+    config: { machineId: '', service: 'mock_plc' },
   },
   {
     name: 'Monitor Tags',
@@ -22,10 +22,10 @@ const NODE_TYPES: NodeType[] = [
     config: { machineId: 'machine-01', timeRange: '-24h', threshold: 50 },
   },
   {
-    name: 'Query Pinecone',
+    name: 'AI Analysis',
     type: 'queryPinecone',
-    description: 'Query Pinecone for work order maintenance data',
-    config: { machineId: 'machine-01', alarmType: '', machineType: 'bottlefiller' },
+    description: 'Enter a prompt to query Pinecone and get AI analysis',
+    config: { prompt: 'Enter your question or analysis request here...', machineId: 'machine-01', machineType: 'bottlefiller' },
   },
   {
     name: 'Create Work Order',
@@ -34,9 +34,9 @@ const NODE_TYPES: NodeType[] = [
     config: {},
   },
   {
-    name: 'Save to InfluxDB',
-    type: 'saveWorkOrder',
-    description: 'Save work order to InfluxDB',
+    name: 'Create Report',
+    type: 'createReport',
+    description: 'Generate a report from collected data',
     config: {},
   },
 ];
