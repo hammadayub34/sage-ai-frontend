@@ -18,6 +18,7 @@ function getBaseUrl(): string {
 interface WorkflowState {
   machineId?: string;
   alarmData?: any;
+  sensorData?: any;
   pineconeData?: any;
   workOrderData?: any;
   executionLog?: string[];
@@ -168,11 +169,20 @@ export async function startAgentTool(
   logBoth?: (message: string) => void
 ): Promise<WorkflowState> {
   const log = state.executionLog || [];
-  log.push(`🔧 Starting ${config.service} for ${config.machineId}...`);
+  
+  // Validate machineId is provided (required for mock_plc service)
+  if (config.service === 'mock_plc' && (!config.machineId || config.machineId.trim() === '')) {
+    const errorMsg = 'machineId is required for Start Agent node. Please select a machine in the node configuration.';
+    log.push(`❌ Error: ${errorMsg}`);
+    if (logBoth) logBoth(`   ❌ [TOOL] startAgentTool error: ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+  
+  log.push(`🔧 Starting ${config.service} for ${config.machineId || 'influxdb_writer'}...`);
   
   // UI logging only (console.logs removed for performance)
   if (logBoth) logBoth(`   🔧 [TOOL] startAgentTool called`);
-  if (logBoth) logBoth(`      Service: ${config.service}, Machine: ${config.machineId}`);
+  if (logBoth) logBoth(`      Service: ${config.service}, Machine: ${config.machineId || 'N/A'}`);
 
   try {
     const baseUrl = getBaseUrl();
@@ -583,6 +593,87 @@ export async function queryPineconeTool(
 }
 
 /**
+ * Monitor Sensor Values Tool
+ * Queries InfluxDB for current sensor values and tag data
+ */
+export async function monitorSensorValuesTool(
+  state: WorkflowState,
+  config: { machineId: string; timeRange?: string; machineType?: string },
+  logBoth?: (message: string) => void
+): Promise<WorkflowState> {
+  const log = state.executionLog || [];
+  const machineId = config.machineId || state.machineId || 'machine-01';
+  const timeRange = config.timeRange || '-5m';
+  const machineType = config.machineType;
+
+  log.push(`📊 Monitoring sensor values for ${machineId}...`);
+  if (logBoth) logBoth(`   📊 [TOOL] monitorSensorValuesTool called`);
+  if (logBoth) logBoth(`      Machine: ${machineId}, Time Range: ${timeRange}${machineType ? `, Machine Type: ${machineType}` : ''}`);
+
+  try {
+    const baseUrl = getBaseUrl();
+    let url = `${baseUrl}/api/influxdb/latest?machineId=${machineId}&timeRange=${timeRange}`;
+    if (machineType) {
+      url += `&machineType=${machineType}`;
+    }
+    
+    if (logBoth) logBoth(`      Calling: ${url}`);
+    const response = await fetch(url, {
+      method: 'GET',
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.data) {
+      const sensorData = result.data;
+      const fieldCount = Object.keys(sensorData).length;
+      
+      log.push(`✅ Retrieved ${fieldCount} sensor value(s) for ${machineId}`);
+      if (logBoth) logBoth(`      ✅ Result: Retrieved ${fieldCount} sensor values`);
+      
+      // Log some key sensor values
+      const keyFields = ['BottlesFilled', 'BottlesPerMinute', 'FillLevel', 'TankTemperature', 'SystemRunning', 'Fault'];
+      const keyValues: string[] = [];
+      for (const field of keyFields) {
+        if (sensorData[field] !== undefined) {
+          keyValues.push(`${field}=${sensorData[field]}`);
+        }
+      }
+      if (keyValues.length > 0) {
+        if (logBoth) logBoth(`      📈 Key values: ${keyValues.join(', ')}`);
+      }
+
+      return {
+        ...state,
+        machineId,
+        sensorData: {
+          timestamp: result.timestamp || sensorData._time,
+          values: sensorData,
+          fieldCount,
+        },
+        executionLog: log,
+      };
+    } else if (response.status === 404) {
+      log.push(`⚠️ No sensor data found for ${machineId}`);
+      if (logBoth) logBoth(`      ⚠️  Result: No data found for ${machineId}`);
+      return {
+        ...state,
+        machineId,
+        sensorData: null,
+        executionLog: log,
+      };
+    } else {
+      if (logBoth) logBoth(`      ❌ Result: Failed - ${result.error || 'Unknown error'}`);
+      throw new Error(result.error || 'Failed to monitor sensor values');
+    }
+  } catch (error: any) {
+    log.push(`❌ Error monitoring sensor values: ${error.message}`);
+    if (logBoth) logBoth(`      ❌ Error: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
  * Create Work Order Tool
  * Formats work order data from previous nodes
  */
@@ -703,6 +794,7 @@ export async function saveWorkOrderTool(
 export const TOOL_REGISTRY: Record<string, (state: WorkflowState, config: any) => Promise<WorkflowState>> = {
   startAgent: startAgentTool,
   monitorTags: monitorTagsTool,
+  monitorSensorValues: monitorSensorValuesTool,
   queryPinecone: queryPineconeTool,
   createWorkOrder: createWorkOrderTool,
   saveWorkOrder: saveWorkOrderTool,

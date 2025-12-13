@@ -22,6 +22,7 @@ interface WorkflowCanvasProps {
   edges: Edge[];
   onNodesChange: (nodes: Node[]) => void;
   onEdgesChange: (edges: Edge[]) => void;
+  onNodeClick?: (node: Node) => void;
 }
 
 // Custom node component with connection handles
@@ -63,6 +64,7 @@ export function WorkflowCanvas({
   edges: initialEdges,
   onNodesChange,
   onEdgesChange,
+  onNodeClick,
 }: WorkflowCanvasProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
@@ -168,7 +170,13 @@ export function WorkflowCanvas({
         data: {
           label: nodeData.name,
           type: nodeData.type,
-          config: nodeData.config || {},
+          config: {
+            ...(nodeData.config || {}),
+            // Ensure service is set for startAgent nodes
+            ...(nodeData.type === 'startAgent' && !nodeData.config?.service ? { service: 'mock_plc' } : {}),
+            // Ensure machineId exists for startAgent nodes (even if empty)
+            ...(nodeData.type === 'startAgent' && nodeData.config?.machineId === undefined ? { machineId: '' } : {}),
+          },
         },
       };
 
@@ -197,6 +205,10 @@ export function WorkflowCanvas({
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onInit={setReactFlowInstance}
+        onNodeClick={onNodeClick ? (event, node) => {
+          event.stopPropagation();
+          onNodeClick(node);
+        } : undefined}
         nodeTypes={nodeTypes}
         fitView
         className="bg-transparent"

@@ -14,7 +14,7 @@ export const EXAMPLE_WORKFLOW = {
           machineId: 'machine-01',
           service: 'mock_plc',
         },
-        label: 'Start Agent',
+        label: 'Connect Machine',
       },
     },
     {

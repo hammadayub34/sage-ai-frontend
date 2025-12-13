@@ -16,14 +16,15 @@ fi
 LATHE_MACHINE_ID=${1:-lathe01}
 
 # Set environment variables for the Python script
+# Note: These explicitly override .env file values for local development
 export LATHE_MACHINE_ID="$LATHE_MACHINE_ID"
-export MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-localhost}
-export MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-8883} # Default to 8883 for TLS
+export MQTT_BROKER_HOST=localhost
+export MQTT_BROKER_PORT=1883  # Use 1883 for non-TLS (local dev) - overrides .env
 export MQTT_USERNAME=${MQTT_USERNAME:-mock_plc_agent}
 export MQTT_PASSWORD=${MQTT_PASSWORD:-mock_plc_agent_pass}
-export MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED:-true}
+export MQTT_TLS_ENABLED=false  # Disable TLS for local dev - overrides .env
 export CA_CERT_PATH=${CA_CERT_PATH:-mosquitto/config/certs/ca.crt}
-export MQTT_TLS_CHECK_HOSTNAME=${MQTT_TLS_CHECK_HOSTNAME:-false} # Disable for localhost
+export MQTT_TLS_CHECK_HOSTNAME=false  # Disable for localhost
 
 echo "🚀 Starting CNC Lathe Simulator for $LATHE_MACHINE_ID..."
 echo "   Working directory: $(pwd)"

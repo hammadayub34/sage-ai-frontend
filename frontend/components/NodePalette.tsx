@@ -10,9 +10,9 @@ interface NodeType {
 
 const NODE_TYPES: NodeType[] = [
   {
-    name: 'Start Agent',
+    name: 'Connect Machine',
     type: 'startAgent',
-    description: 'Start a mock PLC agent or InfluxDB writer',
+    description: 'Establish TCP/IP connection with machine',
     config: { machineId: '', service: 'mock_plc' },
   },
   {
@@ -20,6 +20,12 @@ const NODE_TYPES: NodeType[] = [
     type: 'monitorTags',
     description: 'Query InfluxDB for tags/alarms exceeding threshold',
     config: { machineId: 'machine-01', timeRange: '-24h', threshold: 50 },
+  },
+  {
+    name: 'Monitor Sensor Values',
+    type: 'monitorSensorValues',
+    description: 'Query InfluxDB for current sensor values and tag data',
+    config: { machineId: 'machine-01', timeRange: '-5m' },
   },
   {
     name: 'AI Analysis',

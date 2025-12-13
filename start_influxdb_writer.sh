@@ -4,10 +4,10 @@
 cd /Users/khanhamza/mqtt-ot-network
 
 export MQTT_BROKER_HOST=localhost
-export MQTT_BROKER_PORT=8883
+export MQTT_BROKER_PORT=1883
 export MQTT_USERNAME=influxdb_writer
 export MQTT_PASSWORD=influxdb_writer_pass
-export MQTT_TLS_ENABLED=true
+export MQTT_TLS_ENABLED=false
 export MQTT_TLS_CHECK_HOSTNAME=false
 export CA_CERT_PATH=mosquitto/config/certs/ca.crt
 export INFLUXDB_URL=http://localhost:8086

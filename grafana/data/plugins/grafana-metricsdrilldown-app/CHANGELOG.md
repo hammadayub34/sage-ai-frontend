@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.25
+
+##### Chores
+
+* **deps:**  Update dependency @types/node to v20.19.25 (#875) (a2a56193)
+
+##### New Features
+
+* **assistant:**  add entry point to grafana assistant from metric scene (#883) (2f44ce5f)
+*  add exposed component for Knowledge Graph source metrics (#873) (120ff2d6)
+
+##### Bug Fixes
+
+*  handle non-error object with `message` (#879) (0a92be94)
+
+
+## 1.0.24
+
+##### Chores
+
+*  bump playwright to v1.57.0 (#869) (43d070ea)
+*  add renovate.json (#859) (2bcf0f8b)
+
+##### Bug Fixes
+
+*  manually revert lazy loading promql parser (#867) (76a733a9)
+
+
 ## 1.0.23
 
 ##### Chores

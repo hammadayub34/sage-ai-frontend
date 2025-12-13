@@ -332,38 +332,112 @@ export default function WorkflowsPage() {
                       <div className="text-white text-sm">{selectedNode.data.label}</div>
                     </div>
                     {selectedNode.data.type === 'startAgent' && (
-                      <div>
-                        <label className="text-gray-400 text-xs mb-1 block">Machine</label>
-                        <select
-                          value={selectedNode.data.config?.machineId || ''}
-                          onChange={(e) => {
-                            const updatedNodes = nodes.map(n =>
-                              n.id === selectedNode.id
-                                ? {
-                                    ...n,
-                                    data: {
-                                      ...n.data,
-                                      config: {
-                                        ...n.data.config,
-                                        machineId: e.target.value,
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-gray-400 text-xs mb-1 block">Machine</label>
+                          <select
+                            value={selectedNode.data.config?.machineId || ''}
+                            onChange={(e) => {
+                              const updatedNodes = nodes.map(n =>
+                                n.id === selectedNode.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        config: {
+                                          ...(n.data.config || {}),
+                                          service: n.data.config?.service || 'mock_plc', // Preserve service
+                                          machineId: e.target.value,
+                                        },
                                       },
-                                    },
-                                  }
-                                : n
-                            );
-                            setNodes(updatedNodes);
-                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
-                          }}
-                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
-                        >
-                          <option value="">Select a machine...</option>
-                          <option value="machine-01">machine-01 (Bottle Filler)</option>
-                          <option value="machine-02">machine-02 (Bottle Filler)</option>
-                          <option value="machine-03">machine-03 (Bottle Filler)</option>
-                          <option value="lathe01">lathe01 (Lathe)</option>
-                          <option value="lathe02">lathe02 (Lathe)</option>
-                          <option value="lathe03">lathe03 (Lathe)</option>
-                        </select>
+                                    }
+                                  : n
+                              );
+                              setNodes(updatedNodes);
+                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                            }}
+                            className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                          >
+                            <option value="">Select a machine...</option>
+                            <option value="machine-01">machine-01 (Bottle Filler)</option>
+                            <option value="machine-02">machine-02 (Bottle Filler)</option>
+                            <option value="machine-03">machine-03 (Bottle Filler)</option>
+                            <option value="lathe01">lathe01 (Lathe)</option>
+                            <option value="lathe02">lathe02 (Lathe)</option>
+                            <option value="lathe03">lathe03 (Lathe)</option>
+                          </select>
+                        </div>
+                        {selectedNode.data.config?.machineId && (
+                          <div className="text-xs text-gray-500">
+                            Selected: <span className="text-sage-400">{selectedNode.data.config.machineId}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {selectedNode.data.type === 'monitorSensorValues' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-gray-400 text-xs mb-1 block">Machine</label>
+                          <select
+                            value={selectedNode.data.config?.machineId || 'machine-01'}
+                            onChange={(e) => {
+                              const updatedNodes = nodes.map(n =>
+                                n.id === selectedNode.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        config: {
+                                          ...(n.data.config || {}),
+                                          machineId: e.target.value,
+                                        },
+                                      },
+                                    }
+                                  : n
+                              );
+                              setNodes(updatedNodes);
+                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                            }}
+                            className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                          >
+                            <option value="machine-01">machine-01 (Bottle Filler)</option>
+                            <option value="machine-02">machine-02 (Bottle Filler)</option>
+                            <option value="machine-03">machine-03 (Bottle Filler)</option>
+                            <option value="lathe01">lathe01 (Lathe)</option>
+                            <option value="lathe02">lathe02 (Lathe)</option>
+                            <option value="lathe03">lathe03 (Lathe)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-xs mb-1 block">Time Range</label>
+                          <select
+                            value={selectedNode.data.config?.timeRange || '-5m'}
+                            onChange={(e) => {
+                              const updatedNodes = nodes.map(n =>
+                                n.id === selectedNode.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        config: {
+                                          ...(n.data.config || {}),
+                                          timeRange: e.target.value,
+                                        },
+                                      },
+                                    }
+                                  : n
+                              );
+                              setNodes(updatedNodes);
+                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                            }}
+                            className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                          >
+                            <option value="-5m">Last 5 minutes</option>
+                            <option value="-15m">Last 15 minutes</option>
+                            <option value="-1h">Last hour</option>
+                            <option value="-24h">Last 24 hours</option>
+                          </select>
+                        </div>
                       </div>
                     )}
                     {selectedNode.data.type === 'queryPinecone' && (
