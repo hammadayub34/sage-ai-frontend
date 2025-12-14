@@ -178,12 +178,88 @@ export default function Dashboard() {
               ) : (
                 <div className="p-6">
                   <h3 className="text-lg font-semibold mb-4 text-white">Images & Video</h3>
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Video Upload - Left Side */}
                     <div className="bg-dark-bg rounded-lg border border-dark-border p-4">
-                      <h4 className="text-md font-medium mb-2 text-gray-300">Live Video Feed</h4>
-                      <div className="aspect-video bg-dark-panel rounded border border-dark-border flex items-center justify-center max-w-xl mx-auto">
+                      <h4 className="text-md font-medium mb-2 text-gray-300">Upload Video</h4>
+                      <div className="aspect-video bg-dark-panel rounded border border-dark-border flex items-center justify-center border-dashed">
                         <div className="text-center text-gray-500">
-                          <p className="text-sm">Video feed will appear here</p>
+                          <input
+                            type="file"
+                            accept="video/*"
+                            className="hidden"
+                            id="video-upload"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                console.log('Video selected:', file.name);
+                                // TODO: Handle video upload
+                              }
+                            }}
+                          />
+                          <label
+                            htmlFor="video-upload"
+                            className="cursor-pointer flex flex-col items-center gap-2"
+                          >
+                            <svg
+                              className="w-12 h-12 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                              />
+                            </svg>
+                            <p className="text-sm">Click to upload video</p>
+                            <p className="text-xs text-gray-600">or drag and drop</p>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Image Upload - Right Side */}
+                    <div className="bg-dark-bg rounded-lg border border-dark-border p-4">
+                      <h4 className="text-md font-medium mb-2 text-gray-300">Upload Images</h4>
+                      <div className="aspect-video bg-dark-panel rounded border border-dark-border flex items-center justify-center border-dashed">
+                        <div className="text-center text-gray-500">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            id="image-upload"
+                            onChange={(e) => {
+                              const files = e.target.files;
+                              if (files && files.length > 0) {
+                                console.log('Images selected:', files.length);
+                                // TODO: Handle image upload
+                              }
+                            }}
+                          />
+                          <label
+                            htmlFor="image-upload"
+                            className="cursor-pointer flex flex-col items-center gap-2"
+                          >
+                            <svg
+                              className="w-12 h-12 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                              />
+                            </svg>
+                            <p className="text-sm">Click to upload images</p>
+                            <p className="text-xs text-gray-600">or drag and drop</p>
+                          </label>
                         </div>
                       </div>
                     </div>

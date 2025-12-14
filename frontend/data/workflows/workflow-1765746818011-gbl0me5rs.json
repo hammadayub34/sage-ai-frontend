@@ -1,0 +1,45 @@
+{
+  "id": "workflow-1765746818011-gbl0me5rs",
+  "name": "Connect Monitor",
+  "description": "Workflow with 2 nodes",
+  "nodes": [
+    {
+      "id": "node-1765746785587",
+      "type": "tool",
+      "data": {
+        "type": "startAgent",
+        "config": {
+          "machineId": "lathe02",
+          "service": "mock_plc"
+        },
+        "label": "Connect Machine"
+      }
+    },
+    {
+      "id": "node-1765746809612",
+      "type": "tool",
+      "data": {
+        "type": "monitorTags",
+        "config": {
+          "machineId": "lathe02",
+          "timeRange": "-24h",
+          "threshold": 50
+        },
+        "label": "Monitor Tags"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-node-1765746785587-node-1765746809612",
+      "source": "node-1765746785587",
+      "target": "node-1765746809612"
+    }
+  ],
+  "schedule": {
+    "type": "none",
+    "enabled": false
+  },
+  "createdAt": "2025-12-14T21:13:38.011Z",
+  "updatedAt": "2025-12-14T21:13:38.011Z"
+}

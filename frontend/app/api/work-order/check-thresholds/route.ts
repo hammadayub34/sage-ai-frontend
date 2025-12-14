@@ -37,6 +37,25 @@ interface AlarmCount {
   exceeded: boolean;
 }
 
+/**
+ * Convert time range to InfluxDB range syntax
+ * +5m -> start: now(), stop: now() + 5m (future)
+ * -5m -> start: -5m (past, backward compatible)
+ */
+function getInfluxDBRange(timeRange: string): string {
+  if (timeRange.startsWith('+')) {
+    // Future range: +5m -> start: now(), stop: now() + 5m
+    const duration = timeRange.substring(1); // Remove +
+    return `start: now(), stop: now() + ${duration}`;
+  } else if (timeRange.startsWith('-')) {
+    // Past range: -5m -> start: -5m (backward compatible)
+    return `start: ${timeRange}`;
+  } else {
+    // Default to past 24h if format is unknown
+    return `start: -24h`;
+  }
+}
+
 async function countAlarmOccurrences(
   alarmField: string,
   machineId: string,
@@ -47,9 +66,11 @@ async function countAlarmOccurrences(
     ? `|> filter(fn: (r) => r["machine_type"] == "${machineType}")`
     : '';
 
+  const rangeSyntax = getInfluxDBRange(timeRange);
+
   const fluxQuery = `
     from(bucket: "${INFLUXDB_BUCKET}")
-      |> range(start: ${timeRange})
+      |> range(${rangeSyntax})
       |> filter(fn: (r) => r["machine_id"] == "${machineId}")
       ${machineTypeFilter}
       |> filter(fn: (r) => r["_field"] == "${alarmField}")
@@ -101,9 +122,11 @@ async function countSafetyTagOccurrences(
     ? `|> filter(fn: (r) => r["machine_type"] == "${machineType}")`
     : '';
 
+  const rangeSyntax = getInfluxDBRange(timeRange);
+
   const fluxQuery = `
     from(bucket: "${INFLUXDB_BUCKET}")
-      |> range(start: ${timeRange})
+      |> range(${rangeSyntax})
       |> filter(fn: (r) => r["machine_id"] == "${machineId}")
       ${machineTypeFilter}
       |> filter(fn: (r) => r["_field"] == "${safetyField}")
@@ -149,7 +172,7 @@ export async function POST(request: NextRequest) {
     const { 
       machineId, 
       machineType, 
-      timeRange = '-24h', 
+      timeRange = '+24h', 
       customThreshold,
       safetyTags,  // Array of safety tags to check (optional)
       alarmTags    // Array of alarm tags to check (optional)

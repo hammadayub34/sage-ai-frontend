@@ -474,7 +474,7 @@ export async function monitorTagsTool(
 ): Promise<WorkflowState> {
   const log = state.executionLog || [];
   const machineId = config.machineId || state.machineId || 'machine-01';
-  const timeRange = config.timeRange || '-24h';
+  const timeRange = config.timeRange || '+24h';
   const threshold = config.threshold || 50;
 
   // Helper function to get machineType from machineId

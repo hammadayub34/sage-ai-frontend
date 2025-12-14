@@ -122,7 +122,6 @@ export function NodePalette({
 
   return (
     <div className="p-4">
-      <h3 className="text-white font-medium mb-4 text-sm">Available Nodes</h3>
       <div className="space-y-2">
         {NODE_TYPES.map((node) => {
           const isEnabled = isNodeEnabled(node.type);

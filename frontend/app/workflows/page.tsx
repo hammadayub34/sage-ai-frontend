@@ -6,6 +6,7 @@ import { NodePalette } from '@/components/NodePalette';
 import { PlayIcon, WorkflowIcon } from '@/components/Icons';
 import { EXAMPLE_WORKFLOW } from '@/lib/workflow-examples';
 import { ChatDock } from '@/components/ChatDock';
+import { toast } from 'react-toastify';
 
 const MIN_CANVAS_HEIGHT = 400;
 const MAX_CANVAS_HEIGHT = 1200;
@@ -18,7 +19,12 @@ export default function WorkflowsPage() {
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [dropdownStates, setDropdownStates] = useState<Record<string, { safety: boolean; alarm: boolean }>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedWorkflows, setSavedWorkflows] = useState<any[]>([]);
+  const [isLoadingWorkflows, setIsLoadingWorkflows] = useState(false);
+  const [sidebarView, setSidebarView] = useState<'nodes' | 'workflows'>('nodes');
   const logEndRef = useRef<HTMLDivElement>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
   const [canvasHeight, setCanvasHeight] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('workflow-canvas-height');
@@ -53,6 +59,80 @@ export default function WorkflowsPage() {
       localStorage.setItem('workflow-canvas-height', canvasHeight.toString());
     }
   }, [canvasHeight]);
+
+  const loadSavedWorkflows = useCallback(async () => {
+    setIsLoadingWorkflows(true);
+    try {
+      const response = await fetch('/api/workflows/list');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const result = await response.json();
+      if (result.success) {
+        setSavedWorkflows(result.workflows || []);
+      } else {
+        console.error('Failed to load workflows:', result.error);
+        setSavedWorkflows([]);
+      }
+    } catch (error: any) {
+      console.error('Error loading workflows:', error);
+      setSavedWorkflows([]);
+    } finally {
+      setIsLoadingWorkflows(false);
+    }
+  }, []);
+
+  // Load saved workflows on mount and initialize scheduler
+  useEffect(() => {
+    loadSavedWorkflows();
+    // Initialize scheduler on app load
+    fetch('/api/workflows/scheduler/init').catch(err => {
+      console.error('Failed to initialize scheduler:', err);
+    });
+  }, [loadSavedWorkflows]);
+
+  const handleLoadWorkflow = async (workflowId: string) => {
+    try {
+      const response = await fetch(`/api/workflows/load?id=${workflowId}`);
+      const result = await response.json();
+      
+      if (result.success && result.workflow) {
+        const workflow = result.workflow;
+        
+        // Transform nodes to match ReactFlow format
+        const nodePositions = [
+          { x: 100, y: 200 },
+          { x: 300, y: 200 },
+          { x: 500, y: 200 },
+          { x: 700, y: 200 },
+          { x: 900, y: 200 },
+        ];
+        
+        const loadedNodes = workflow.nodes.map((n: any, idx: number) => ({
+          ...n,
+          type: 'tool-node',
+          position: nodePositions[idx] || { x: 100 + idx * 200, y: 200 },
+        }));
+        
+        console.log('📋 [WORKFLOW] Loading saved workflow:', workflow.name);
+        console.log('   Nodes:', loadedNodes.length);
+        console.log('   Edges:', workflow.edges.length);
+        
+        setNodes(loadedNodes);
+        setEdges(workflow.edges || []);
+        setSelectedNode(null);
+        setExecutionLog([]);
+        
+        // Refresh the list to update any metadata
+        loadSavedWorkflows();
+      } else {
+        alert(`Failed to load workflow: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      console.error('Error loading workflow:', error);
+      alert(`Error loading workflow: ${error.message}`);
+    }
+  };
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -93,6 +173,102 @@ export default function WorkflowsPage() {
     };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
+  // Generate workflow name from connected nodes (1-2 words max)
+  const generateWorkflowName = (nodes: any[], edges: any[]): string => {
+    if (nodes.length === 0) return 'Empty Workflow';
+    
+    // Get node types in execution order
+    const nodeTypes = nodes.map(n => n.data.type);
+    
+    // Map node types to short names
+    const nodeNameMap: Record<string, string> = {
+      'startAgent': 'Connect',
+      'monitorTags': 'Monitor',
+      'monitorSensorValues': 'Sensors',
+      'queryPinecone': 'Analysis',
+      'createWorkOrder': 'WorkOrder',
+      'createReport': 'Report',
+    };
+    
+    // Get unique node types (in order of appearance)
+    const uniqueTypes: string[] = [];
+    nodeTypes.forEach(type => {
+      if (!uniqueTypes.includes(type)) {
+        uniqueTypes.push(type);
+      }
+    });
+    
+    // Generate name from first 2 unique node types
+    if (uniqueTypes.length === 1) {
+      return nodeNameMap[uniqueTypes[0]] || 'Workflow';
+    } else if (uniqueTypes.length >= 2) {
+      const first = nodeNameMap[uniqueTypes[0]] || 'Workflow';
+      const second = nodeNameMap[uniqueTypes[1]] || '';
+      return second ? `${first} ${second}` : first;
+    }
+    
+    return 'Workflow';
+  };
+
+  const handleSaveWorkflow = async () => {
+    if (nodes.length === 0) {
+      toast.error('Please add at least one node to the workflow');
+      return;
+    }
+
+    // Auto-generate name from nodes
+    const workflowName = generateWorkflowName(nodes, edges);
+    const workflowDescription = `Workflow with ${nodes.length} node${nodes.length !== 1 ? 's' : ''}`;
+
+    setIsSaving(true);
+    try {
+      // Transform nodes to match API expected format
+      const workflowNodes = nodes.map(node => ({
+        id: node.id,
+        type: 'tool',
+        data: {
+          type: node.data.type,
+          config: node.data.config || {},
+          label: node.data.label,
+        },
+      }));
+
+      const workflowEdges = edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+      }));
+
+      const response = await fetch('/api/workflows/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: workflowName,
+          description: workflowDescription,
+          nodes: workflowNodes,
+          edges: workflowEdges,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        toast.success(`Workflow "${workflowName}" saved successfully!`);
+        console.log('Workflow saved:', result.workflowId, workflowName);
+        // Refresh the saved workflows list
+        loadSavedWorkflows();
+      } else {
+        toast.error(`Failed to save workflow: ${result.error || 'Unknown error'}`);
+        console.error('Save error:', result);
+      }
+    } catch (error: any) {
+      console.error('Error saving workflow:', error);
+      toast.error(`Error saving workflow: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleRunWorkflow = async () => {
     if (nodes.length === 0) {
       alert('Please add at least one node to the workflow');
@@ -109,6 +285,7 @@ export default function WorkflowsPage() {
 
     setIsRunning(true);
     setExecutionLog(['Starting workflow execution...']);
+    console.log('Starting workflow execution...');
 
     try {
       // Transform nodes to match API expected format
@@ -161,19 +338,24 @@ export default function WorkflowsPage() {
                   
                   if (jsonData.type === 'start') {
                     setExecutionLog([jsonData.message]);
+                    console.log(jsonData.message);
                   } else if (jsonData.type === 'log') {
                     setExecutionLog(prev => {
                       const newLogs = [...prev, jsonData.message];
-                      // Auto-scroll to bottom
+                      // Auto-scroll only the log container, not the page
                       setTimeout(() => {
-                        logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        if (logContainerRef.current) {
+                          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+                        }
                       }, 50);
                       return newLogs;
                     });
+                    console.log(jsonData.message);
                   } else if (jsonData.type === 'result') {
                     finalResult = jsonData.data;
                     if (jsonData.error) {
                       setExecutionLog(prev => [...prev, `❌ Error: ${jsonData.error}`]);
+                      console.error('❌ Error:', jsonData.error);
                     }
                   } else if (jsonData.type === 'done') {
                     if (finalResult) {
@@ -182,9 +364,12 @@ export default function WorkflowsPage() {
                         '✅ Workflow completed successfully',
                         JSON.stringify(finalResult, null, 2),
                       ]);
+                      console.log('✅ Workflow completed successfully');
+                      console.log('Result:', JSON.stringify(finalResult, null, 2));
                     }
                   } else if (jsonData.type === 'error') {
                     setExecutionLog(prev => [...prev, `❌ Error: ${jsonData.message}`]);
+                    console.error('❌ Error:', jsonData.message);
                   }
                 } catch (e) {
                   console.error('Error parsing SSE data:', e);
@@ -204,12 +389,19 @@ export default function WorkflowsPage() {
             ...(result.result?.executionLog || []),
             JSON.stringify(result.result, null, 2),
           ]);
+          console.log('✅ Workflow completed successfully');
+          if (result.result?.executionLog) {
+            result.result.executionLog.forEach((log: string) => console.log(log));
+          }
+          console.log('Result:', JSON.stringify(result.result, null, 2));
         } else {
           setExecutionLog(prev => [...prev, `❌ Error: ${result.error}`]);
+          console.error('❌ Error:', result.error);
         }
       }
     } catch (error: any) {
       setExecutionLog(prev => [...prev, `❌ Execution failed: ${error.message}`]);
+      console.error('❌ Execution failed:', error.message);
     } finally {
       setIsRunning(false);
     }
@@ -272,6 +464,13 @@ export default function WorkflowsPage() {
                 Clear
               </button>
               <button
+                onClick={handleSaveWorkflow}
+                disabled={isSaving || nodes.length === 0}
+                className="px-4 py-2 rounded text-sm font-medium bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition-colors"
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button
                 onClick={handleRunWorkflow}
                 disabled={isRunning || nodes.length === 0}
                 className="px-4 py-2 rounded text-sm font-medium bg-sage-500 hover:bg-sage-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition-colors"
@@ -332,7 +531,7 @@ export default function WorkflowsPage() {
               </div>
             </div>
 
-            {/* Node Configuration Panel or Node Palette */}
+            {/* Node Configuration Panel, Saved Workflows, or Node Palette */}
             <div className="w-64 bg-dark-panel border-l border-dark-border overflow-y-auto">
               {selectedNode ? (
                 <div className="p-4">
@@ -422,7 +621,7 @@ export default function WorkflowsPage() {
                         <div>
                           <label className="text-gray-400 text-xs mb-1 block">Time Range</label>
                           <select
-                            value={selectedNode.data.config?.timeRange || '-5m'}
+                            value={selectedNode.data.config?.timeRange || '+5m'}
                             onChange={(e) => {
                               const updatedNodes = nodes.map(n =>
                                 n.id === selectedNode.id
@@ -443,10 +642,11 @@ export default function WorkflowsPage() {
                             }}
                             className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
                           >
-                            <option value="-5m">Last 5 minutes</option>
-                            <option value="-15m">Last 15 minutes</option>
-                            <option value="-1h">Last hour</option>
-                            <option value="-24h">Last 24 hours</option>
+                            <option value="+5m">Next 5 minutes</option>
+                            <option value="+30m">Next 30 minutes</option>
+                            <option value="+1h">Next 1 hour</option>
+                            <option value="+6h">Next 6 hours</option>
+                            <option value="+24h">Next 24 hours</option>
                           </select>
                         </div>
                       </div>
@@ -488,7 +688,7 @@ export default function WorkflowsPage() {
                         <div>
                           <label className="text-gray-400 text-xs mb-1 block">Time Range</label>
                           <select
-                            value={selectedNode.data.config?.timeRange || '-24h'}
+                            value={selectedNode.data.config?.timeRange || '+24h'}
                             onChange={(e) => {
                               const updatedNodes = nodes.map(n =>
                                 n.id === selectedNode.id
@@ -509,10 +709,11 @@ export default function WorkflowsPage() {
                             }}
                             className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
                           >
-                            <option value="-1h">Last hour</option>
-                            <option value="-6h">Last 6 hours</option>
-                            <option value="-24h">Last 24 hours</option>
-                            <option value="-7d">Last 7 days</option>
+                            <option value="+5m">Next 5 minutes</option>
+                            <option value="+30m">Next 30 minutes</option>
+                            <option value="+1h">Next 1 hour</option>
+                            <option value="+6h">Next 6 hours</option>
+                            <option value="+24h">Next 24 hours</option>
                           </select>
                         </div>
                         <div>
@@ -860,14 +1061,41 @@ export default function WorkflowsPage() {
                   </div>
                 </div>
               ) : (
-                <NodePalette 
+                <div>
+                  {/* Toggle Buttons */}
+                  <div className="flex border-b border-dark-border">
+                    <button
+                      onClick={() => setSidebarView('nodes')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        sidebarView === 'nodes'
+                          ? 'bg-dark-bg text-white border-b-2 border-sage-500'
+                          : 'text-gray-400 hover:text-white hover:bg-dark-bg'
+                      }`}
+                    >
+                      Available Nodes
+                    </button>
+                    <button
+                      onClick={() => setSidebarView('workflows')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        sidebarView === 'workflows'
+                          ? 'bg-dark-bg text-white border-b-2 border-sage-500'
+                          : 'text-gray-400 hover:text-white hover:bg-dark-bg'
+                      }`}
+                    >
+                      Saved Workflows
+                    </button>
+                  </div>
+
+                  {/* Content based on selected view */}
+                  {sidebarView === 'nodes' ? (
+                    <NodePalette 
                   hasConnectMachineNode={nodes.some(n => n.data.type === 'startAgent')}
                   hasMonitorNode={nodes.some(n => 
                     n.data.type === 'monitorTags' || n.data.type === 'monitorSensorValues'
                   )}
                   hasAIAnalysisNode={nodes.some(n => n.data.type === 'queryPinecone')}
-                  existingNodeTypes={nodes.map(n => n.data.type)}
-                  onAddNode={(node) => {
+                    existingNodeTypes={nodes.map(n => n.data.type)}
+                    onAddNode={(node) => {
                     // Helper function to get machineType from machineId
                     const getMachineType = (machineId: string): string => {
                       if (machineId.startsWith('lathe')) return 'lathe';
@@ -925,6 +1153,35 @@ export default function WorkflowsPage() {
                     });
                   }} 
                 />
+                  ) : (
+                    /* Saved Workflows Section */
+                    <div className="p-4">
+                      <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto">
+                        {isLoadingWorkflows ? (
+                          <div className="text-gray-500 text-xs text-center py-2">Loading...</div>
+                        ) : savedWorkflows.length === 0 ? (
+                          <div className="text-gray-500 text-xs text-center py-2">No saved workflows</div>
+                        ) : (
+                          savedWorkflows.map((workflow) => (
+                            <div
+                              key={workflow.id}
+                              onClick={() => handleLoadWorkflow(workflow.id)}
+                              className="bg-dark-bg border border-dark-border rounded p-2 cursor-pointer hover:border-sage-500 transition-colors"
+                            >
+                              <div className="text-sm font-medium text-white mb-1">{workflow.name}</div>
+                              {workflow.description && (
+                                <div className="text-xs text-gray-400 mb-1 line-clamp-2">{workflow.description}</div>
+                              )}
+                              <div className="text-xs text-gray-500">
+                                {workflow.nodeCount} node{workflow.nodeCount !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -935,7 +1192,7 @@ export default function WorkflowsPage() {
                 isResizing ? 'bg-sage-500 h-1' : 'bg-dark-border hover:bg-sage-400 h-0.5 hover:h-1'
               }`}
             />
-          </div>
+            </div>
 
           {/* Execution Log - below canvas */}
           {(executionLog.length > 0 || isRunning) && (
@@ -959,7 +1216,11 @@ export default function WorkflowsPage() {
                   </button>
                 )}
               </div>
-              <div className="p-4 max-h-64 overflow-y-auto font-mono text-xs scroll-smooth bg-black/50">
+              <div 
+                ref={logContainerRef}
+                className="p-4 h-64 overflow-y-auto font-mono text-xs scroll-smooth bg-black/50"
+                style={{ maxHeight: '256px' }}
+              >
                 {executionLog.length === 0 && isRunning ? (
                   <div className="text-gray-500">Waiting for execution to start...</div>
                 ) : (
