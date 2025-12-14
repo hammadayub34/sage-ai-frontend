@@ -25,6 +25,9 @@ const DEFAULT_THRESHOLDS: Record<string, number> = {
   AlarmDoorOpen: 10,
   AlarmToolWear: 2,
   AlarmCoolantLow: 3,
+  // Safety tags (counts transitions from safe to unsafe)
+  DoorClosed: 5,  // Counts when door was open (false)
+  EStopOK: 3,     // Counts when E-stop was not OK (false)
 };
 
 interface AlarmCount {
@@ -87,9 +90,70 @@ async function countAlarmOccurrences(
   });
 }
 
+// Function to count safety tag occurrences (counts when tag is false/unsafe)
+async function countSafetyTagOccurrences(
+  safetyField: string,
+  machineId: string,
+  timeRange: string,
+  machineType?: string
+): Promise<number> {
+  const machineTypeFilter = machineType 
+    ? `|> filter(fn: (r) => r["machine_type"] == "${machineType}")`
+    : '';
+
+  const fluxQuery = `
+    from(bucket: "${INFLUXDB_BUCKET}")
+      |> range(start: ${timeRange})
+      |> filter(fn: (r) => r["machine_id"] == "${machineId}")
+      ${machineTypeFilter}
+      |> filter(fn: (r) => r["_field"] == "${safetyField}")
+      |> sort(columns: ["_time"])
+      |> aggregateWindow(every: 1s, fn: last, createEmpty: false)
+  `;
+
+  const results: any[] = [];
+
+  return new Promise((resolve, reject) => {
+    queryApi.queryRows(fluxQuery, {
+      next(row, tableMeta) {
+        const record = tableMeta.toObject(row);
+        results.push(record);
+      },
+      error(error) {
+        console.error(`Error querying ${safetyField}:`, error);
+        resolve(0);
+      },
+      complete() {
+        // Count transitions from true to false (safe to unsafe)
+        let prevValue: boolean | null = null;
+        let transitions = 0;
+
+        for (const record of results) {
+          const currentValue = record._value as boolean;
+
+          if (prevValue !== null && prevValue === true && currentValue === false) {
+            transitions++;
+          }
+
+          prevValue = currentValue;
+        }
+
+        resolve(transitions);
+      },
+    });
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { machineId, machineType, timeRange = '-24h', customThreshold } = await request.json();
+    const { 
+      machineId, 
+      machineType, 
+      timeRange = '-24h', 
+      customThreshold,
+      safetyTags,  // Array of safety tags to check (optional)
+      alarmTags    // Array of alarm tags to check (optional)
+    } = await request.json();
 
     if (!machineId) {
       return NextResponse.json(
@@ -98,31 +162,64 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get alarm fields based on machine type
-    const alarmFields = machineType === 'lathe' ? [
-      'AlarmSpindleOverload',
-      'AlarmChuckNotClamped',
-      'AlarmDoorOpen',
-      'AlarmToolWear',
-      'AlarmCoolantLow'
-    ] : [
-      'AlarmFault',
-      'AlarmOverfill',
-      'AlarmUnderfill',
-      'AlarmLowProductLevel',
-      'AlarmCapMissing'
-    ];
+    // Determine which tags to check
+    let tagsToCheck: string[] = [];
+    const isSafetyTag: Record<string, boolean> = {};
 
-    // Count occurrences for each alarm
+    // Add safety tags if provided (only for lathe)
+    if (machineType === 'lathe' && safetyTags && Array.isArray(safetyTags) && safetyTags.length > 0) {
+      // Remove duplicates and add to tagsToCheck
+      const uniqueSafetyTags = [...new Set(safetyTags)];
+      tagsToCheck.push(...uniqueSafetyTags);
+      uniqueSafetyTags.forEach((tag: string) => {
+        isSafetyTag[tag] = true;
+      });
+    }
+
+    // Add alarm tags if provided
+    if (alarmTags && Array.isArray(alarmTags) && alarmTags.length > 0) {
+      // Remove duplicates and add to tagsToCheck
+      const uniqueAlarmTags = [...new Set(alarmTags)];
+      tagsToCheck.push(...uniqueAlarmTags);
+    } else if (!safetyTags || (Array.isArray(safetyTags) && safetyTags.length === 0)) {
+      // Fallback to all alarm tags if not specified (backward compatible)
+      const allAlarmFields = machineType === 'lathe' ? [
+        'AlarmSpindleOverload',
+        'AlarmChuckNotClamped',
+        'AlarmDoorOpen',
+        'AlarmToolWear',
+        'AlarmCoolantLow'
+      ] : [
+        'AlarmFault',
+        'AlarmOverfill',
+        'AlarmUnderfill',
+        'AlarmLowProductLevel',
+        'AlarmCapMissing'
+      ];
+      tagsToCheck.push(...allAlarmFields);
+    }
+
+    // Remove any duplicates from tagsToCheck (in case a tag appears in both safety and alarm arrays)
+    tagsToCheck = [...new Set(tagsToCheck)];
+
+    // Count occurrences for each tag
     const alarmCounts: AlarmCount[] = [];
     
-    for (const alarmField of alarmFields) {
-      const count = await countAlarmOccurrences(alarmField, machineId, timeRange, machineType);
-      const threshold = customThreshold || DEFAULT_THRESHOLDS[alarmField] || 50; // Default to 50 if not in manual
+    for (const tagField of tagsToCheck) {
+      let count: number;
+      
+      // Use different counting logic for safety tags vs alarm tags
+      if (isSafetyTag[tagField]) {
+        count = await countSafetyTagOccurrences(tagField, machineId, timeRange, machineType);
+      } else {
+        count = await countAlarmOccurrences(tagField, machineId, timeRange, machineType);
+      }
+      
+      const threshold = customThreshold || DEFAULT_THRESHOLDS[tagField] || 50; // Default to 50 if not in manual
       const exceeded = count >= threshold;
 
       alarmCounts.push({
-        alarmType: alarmField,
+        alarmType: tagField,
         count,
         threshold,
         exceeded,

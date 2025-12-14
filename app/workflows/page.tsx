@@ -17,6 +17,7 @@ export default function WorkflowsPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [dropdownStates, setDropdownStates] = useState<Record<string, { safety: boolean; alarm: boolean }>>({});
   const logEndRef = useRef<HTMLDivElement>(null);
   const [canvasHeight, setCanvasHeight] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -27,6 +28,24 @@ export default function WorkflowsPage() {
   });
   const [isResizing, setIsResizing] = useState(false);
   const resizeRef = useRef<HTMLDivElement>(null);
+  
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      // Check if click is outside any dropdown
+      if (!target.closest('.dropdown-container')) {
+        setDropdownStates({});
+      }
+    };
+    
+    if (Object.keys(dropdownStates).length > 0) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [dropdownStates]);
 
   // Save height to localStorage whenever it changes
   useEffect(() => {
@@ -318,7 +337,7 @@ export default function WorkflowsPage() {
               {selectedNode ? (
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-medium text-sm">Node Configuration</h3>
+                    <h3 className="text-white font-medium text-sm">{selectedNode.data.label}</h3>
                     <button
                       onClick={() => setSelectedNode(null)}
                       className="text-gray-400 hover:text-white text-xs"
@@ -327,10 +346,6 @@ export default function WorkflowsPage() {
                     </button>
                   </div>
                   <div className="space-y-3">
-                    <div>
-                      <label className="text-gray-400 text-xs mb-1 block">Node Type</label>
-                      <div className="text-white text-sm">{selectedNode.data.label}</div>
-                    </div>
                     {selectedNode.data.type === 'startAgent' && (
                       <div className="space-y-3">
                         <div>
@@ -377,9 +392,9 @@ export default function WorkflowsPage() {
                     {selectedNode.data.type === 'monitorSensorValues' && (
                       <div className="space-y-3">
                         <div>
-                          <label className="text-gray-400 text-xs mb-1 block">Machine</label>
+                          <label className="text-gray-400 text-xs mb-1 block">Sensor Type</label>
                           <select
-                            value={selectedNode.data.config?.machineId || 'machine-01'}
+                            value={selectedNode.data.config?.sensorType || 'current'}
                             onChange={(e) => {
                               const updatedNodes = nodes.map(n =>
                                 n.id === selectedNode.id
@@ -389,7 +404,7 @@ export default function WorkflowsPage() {
                                         ...n.data,
                                         config: {
                                           ...(n.data.config || {}),
-                                          machineId: e.target.value,
+                                          sensorType: e.target.value,
                                         },
                                       },
                                     }
@@ -400,12 +415,8 @@ export default function WorkflowsPage() {
                             }}
                             className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
                           >
-                            <option value="machine-01">machine-01 (Bottle Filler)</option>
-                            <option value="machine-02">machine-02 (Bottle Filler)</option>
-                            <option value="machine-03">machine-03 (Bottle Filler)</option>
-                            <option value="lathe01">lathe01 (Lathe)</option>
-                            <option value="lathe02">lathe02 (Lathe)</option>
-                            <option value="lathe03">lathe03 (Lathe)</option>
+                            <option value="current">Current</option>
+                            <option value="vibration">Vibration</option>
                           </select>
                         </div>
                         <div>
@@ -440,6 +451,355 @@ export default function WorkflowsPage() {
                         </div>
                       </div>
                     )}
+                    {selectedNode.data.type === 'monitorTags' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-gray-400 text-xs mb-1 block">Machine</label>
+                          <select
+                            value={selectedNode.data.config?.machineId || 'machine-01'}
+                            onChange={(e) => {
+                              const updatedNodes = nodes.map(n =>
+                                n.id === selectedNode.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        config: {
+                                          ...(n.data.config || {}),
+                                          machineId: e.target.value,
+                                        },
+                                      },
+                                    }
+                                  : n
+                              );
+                              setNodes(updatedNodes);
+                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                            }}
+                            className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                          >
+                            <option value="machine-01">machine-01 (Bottle Filler)</option>
+                            <option value="machine-02">machine-02 (Bottle Filler)</option>
+                            <option value="machine-03">machine-03 (Bottle Filler)</option>
+                            <option value="lathe01">lathe01 (Lathe)</option>
+                            <option value="lathe02">lathe02 (Lathe)</option>
+                            <option value="lathe03">lathe03 (Lathe)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-xs mb-1 block">Time Range</label>
+                          <select
+                            value={selectedNode.data.config?.timeRange || '-24h'}
+                            onChange={(e) => {
+                              const updatedNodes = nodes.map(n =>
+                                n.id === selectedNode.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        config: {
+                                          ...(n.data.config || {}),
+                                          timeRange: e.target.value,
+                                        },
+                                      },
+                                    }
+                                  : n
+                              );
+                              setNodes(updatedNodes);
+                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                            }}
+                            className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                          >
+                            <option value="-1h">Last hour</option>
+                            <option value="-6h">Last 6 hours</option>
+                            <option value="-24h">Last 24 hours</option>
+                            <option value="-7d">Last 7 days</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-xs mb-1 block">Threshold</label>
+                          <input
+                            type="number"
+                            value={selectedNode.data.config?.threshold || 50}
+                            onChange={(e) => {
+                              const updatedNodes = nodes.map(n =>
+                                n.id === selectedNode.id
+                                  ? {
+                                      ...n,
+                                      data: {
+                                        ...n.data,
+                                        config: {
+                                          ...(n.data.config || {}),
+                                          threshold: parseInt(e.target.value) || 50,
+                                        },
+                                      },
+                                    }
+                                  : n
+                              );
+                              setNodes(updatedNodes);
+                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                            }}
+                            className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
+                            placeholder="50"
+                            min="1"
+                          />
+                        </div>
+                        {(() => {
+                          const machineId = selectedNode.data.config?.machineId || 'machine-01';
+                          const isLathe = machineId.startsWith('lathe');
+                          const safetyTags = isLathe ? ['DoorClosed', 'EStopOK'] : [];
+                          
+                          if (safetyTags.length > 0) {
+                            const dropdownKey = `safety-${selectedNode.id}`;
+                            const safetyDropdownOpen = dropdownStates[dropdownKey]?.safety || false;
+                            const setSafetyDropdownOpen = (open: boolean) => {
+                              setDropdownStates(prev => ({
+                                ...prev,
+                                [dropdownKey]: { ...prev[dropdownKey], safety: open }
+                              }));
+                            };
+                            const selectedSafety = selectedNode.data.config?.selectedSafetyTags;
+                            const selectedSafetyArray = selectedSafety === 'All' || !selectedSafety 
+                              ? safetyTags 
+                              : Array.isArray(selectedSafety) 
+                                ? selectedSafety 
+                                : [selectedSafety];
+                            const isAllSelected = selectedSafetyArray.length === safetyTags.length;
+                            const displayText = isAllSelected 
+                              ? 'All' 
+                              : selectedSafetyArray.length > 0 
+                                ? selectedSafetyArray.join(', ') 
+                                : 'Select tags...';
+                            
+                            return (
+                              <div>
+                                <label className="text-gray-400 text-xs mb-1 block">Safety Tags</label>
+                                <div className="relative dropdown-container">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSafetyDropdownOpen(!safetyDropdownOpen)}
+                                    className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs text-left focus:outline-none focus:ring-1 focus:ring-sage-500 flex items-center justify-between"
+                                  >
+                                    <span>{displayText}</span>
+                                    <span className="text-gray-400">{safetyDropdownOpen ? '▲' : '▼'}</span>
+                                  </button>
+                                  {safetyDropdownOpen && (
+                                    <div className="absolute z-10 w-full mt-1 bg-dark-bg border border-dark-border rounded shadow-lg max-h-48 overflow-y-auto">
+                                      <div
+                                        className="px-2 py-1 hover:bg-dark-panel cursor-pointer flex items-center"
+                                        onClick={() => {
+                                          const finalValue = isAllSelected ? [] : 'All';
+                                          const updatedNodes = nodes.map(n =>
+                                            n.id === selectedNode.id
+                                              ? {
+                                                  ...n,
+                                                  data: {
+                                                    ...n.data,
+                                                    config: {
+                                                      ...(n.data.config || {}),
+                                                      selectedSafetyTags: finalValue,
+                                                    },
+                                                  },
+                                                }
+                                              : n
+                                          );
+                                          setNodes(updatedNodes);
+                                          setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                                          setSafetyDropdownOpen(false);
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isAllSelected}
+                                          onChange={() => {}}
+                                          className="mr-2"
+                                        />
+                                        <span className="text-white text-xs">All</span>
+                                      </div>
+                                      {safetyTags.map(tag => {
+                                        const isSelected = selectedSafetyArray.includes(tag);
+                                        return (
+                                          <div
+                                            key={tag}
+                                            className="px-2 py-1 hover:bg-dark-panel cursor-pointer flex items-center"
+                                            onClick={() => {
+                                              const currentArray = Array.isArray(selectedSafety) ? selectedSafety : (selectedSafety === 'All' ? safetyTags : [selectedSafety]);
+                                              const newArray = isSelected 
+                                                ? currentArray.filter(t => t !== tag)
+                                                : [...currentArray, tag];
+                                              const finalValue = newArray.length === 0 
+                                                ? 'All' 
+                                                : (newArray.length === safetyTags.length ? 'All' : newArray);
+                                              
+                                              const updatedNodes = nodes.map(n =>
+                                                n.id === selectedNode.id
+                                                  ? {
+                                                      ...n,
+                                                      data: {
+                                                        ...n.data,
+                                                        config: {
+                                                          ...(n.data.config || {}),
+                                                          selectedSafetyTags: finalValue,
+                                                        },
+                                                      },
+                                                    }
+                                                  : n
+                                              );
+                                              setNodes(updatedNodes);
+                                              setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                                            }}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() => {}}
+                                              className="mr-2"
+                                            />
+                                            <span className="text-white text-xs">{tag}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        {(() => {
+                          const machineId = selectedNode.data.config?.machineId || 'machine-01';
+                          const isLathe = machineId.startsWith('lathe');
+                          const alarmTags = isLathe ? [
+                            'AlarmSpindleOverload',
+                            'AlarmChuckNotClamped',
+                            'AlarmDoorOpen',
+                            'AlarmToolWear',
+                            'AlarmCoolantLow'
+                          ] : [
+                            'AlarmFault',
+                            'AlarmOverfill',
+                            'AlarmUnderfill',
+                            'AlarmLowProductLevel',
+                            'AlarmCapMissing'
+                          ];
+                          
+                          const dropdownKey = `alarm-${selectedNode.id}`;
+                          const alarmDropdownOpen = dropdownStates[dropdownKey]?.alarm || false;
+                          const setAlarmDropdownOpen = (open: boolean) => {
+                            setDropdownStates(prev => ({
+                              ...prev,
+                              [dropdownKey]: { ...prev[dropdownKey], alarm: open }
+                            }));
+                          };
+                          const selectedAlarms = selectedNode.data.config?.selectedAlarmTags;
+                          const selectedAlarmsArray = selectedAlarms === 'All' || !selectedAlarms 
+                            ? alarmTags 
+                            : Array.isArray(selectedAlarms) 
+                              ? selectedAlarms 
+                              : [selectedAlarms];
+                          const isAllSelected = selectedAlarmsArray.length === alarmTags.length;
+                          const displayText = isAllSelected 
+                            ? 'All' 
+                            : selectedAlarmsArray.length > 0 
+                              ? selectedAlarmsArray.join(', ') 
+                              : 'Select tags...';
+                          
+                          return (
+                            <div>
+                              <label className="text-gray-400 text-xs mb-1 block">Alarm Tags</label>
+                              <div className="relative dropdown-container">
+                                <button
+                                  type="button"
+                                  onClick={() => setAlarmDropdownOpen(!alarmDropdownOpen)}
+                                  className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs text-left focus:outline-none focus:ring-1 focus:ring-sage-500 flex items-center justify-between"
+                                >
+                                  <span>{displayText}</span>
+                                  <span className="text-gray-400">{alarmDropdownOpen ? '▲' : '▼'}</span>
+                                </button>
+                                {alarmDropdownOpen && (
+                                  <div className="absolute z-10 w-full mt-1 bg-dark-bg border border-dark-border rounded shadow-lg max-h-48 overflow-y-auto">
+                                    <div
+                                      className="px-2 py-1 hover:bg-dark-panel cursor-pointer flex items-center"
+                                      onClick={() => {
+                                        const finalValue = isAllSelected ? [] : 'All';
+                                        const updatedNodes = nodes.map(n =>
+                                          n.id === selectedNode.id
+                                            ? {
+                                                ...n,
+                                                data: {
+                                                  ...n.data,
+                                                  config: {
+                                                    ...(n.data.config || {}),
+                                                    selectedAlarmTags: finalValue,
+                                                  },
+                                                },
+                                              }
+                                            : n
+                                        );
+                                        setNodes(updatedNodes);
+                                        setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                                        setAlarmDropdownOpen(false);
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        onChange={() => {}}
+                                        className="mr-2"
+                                      />
+                                      <span className="text-white text-xs">All</span>
+                                    </div>
+                                    {alarmTags.map(tag => {
+                                      const isSelected = selectedAlarmsArray.includes(tag);
+                                      return (
+                                        <div
+                                          key={tag}
+                                          className="px-2 py-1 hover:bg-dark-panel cursor-pointer flex items-center"
+                                          onClick={() => {
+                                            const currentArray = Array.isArray(selectedAlarms) ? selectedAlarms : (selectedAlarms === 'All' ? alarmTags : [selectedAlarms]);
+                                            const newArray = isSelected 
+                                              ? currentArray.filter(t => t !== tag)
+                                              : [...currentArray, tag];
+                                            const finalValue = newArray.length === 0 
+                                              ? 'All' 
+                                              : (newArray.length === alarmTags.length ? 'All' : newArray);
+                                            
+                                            const updatedNodes = nodes.map(n =>
+                                              n.id === selectedNode.id
+                                                ? {
+                                                    ...n,
+                                                    data: {
+                                                      ...n.data,
+                                                      config: {
+                                                        ...(n.data.config || {}),
+                                                        selectedAlarmTags: finalValue,
+                                                      },
+                                                    },
+                                                  }
+                                                : n
+                                            );
+                                            setNodes(updatedNodes);
+                                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => {}}
+                                            className="mr-2"
+                                          />
+                                          <span className="text-white text-xs">{tag}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                     {selectedNode.data.type === 'queryPinecone' && (
                       <div>
                         <label className="text-gray-400 text-xs mb-1 block">Prompt</label>
@@ -465,11 +825,11 @@ export default function WorkflowsPage() {
                           }}
                           className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500 resize-none"
                           rows={4}
-                          placeholder="Enter your question or analysis request here..."
+                          placeholder="Request analysis from Wise Guy here..."
                         />
                       </div>
                     )}
-                    {selectedNode.data.type !== 'startAgent' && selectedNode.data.config?.machineId && (
+                    {selectedNode.data.type !== 'startAgent' && selectedNode.data.type !== 'monitorTags' && selectedNode.data.type !== 'monitorSensorValues' && selectedNode.data.config?.machineId && (
                       <div>
                         <label className="text-gray-400 text-xs mb-1 block">Machine ID</label>
                         <input
@@ -497,62 +857,74 @@ export default function WorkflowsPage() {
                         />
                       </div>
                     )}
-                    {selectedNode.data.config?.machineType && (
-                      <div>
-                        <label className="text-gray-400 text-xs mb-1 block">Machine Type</label>
-                        <select
-                          value={selectedNode.data.config.machineType}
-                          onChange={(e) => {
-                            const updatedNodes = nodes.map(n =>
-                              n.id === selectedNode.id
-                                ? {
-                                    ...n,
-                                    data: {
-                                      ...n.data,
-                                      config: {
-                                        ...n.data.config,
-                                        machineType: e.target.value,
-                                      },
-                                    },
-                                  }
-                                : n
-                            );
-                            setNodes(updatedNodes);
-                            setSelectedNode(updatedNodes.find(n => n.id === selectedNode.id));
-                          }}
-                          className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-sage-500"
-                        >
-                          <option value="bottlefiller">Bottle Filler</option>
-                          <option value="lathe">Lathe</option>
-                        </select>
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : (
-                <NodePalette onAddNode={(node) => {
-                  const newNode = {
-                    id: `node-${Date.now()}`,
-                    type: 'tool-node',
-                    position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
-                    data: {
+                <NodePalette 
+                  hasConnectMachineNode={nodes.some(n => n.data.type === 'startAgent')}
+                  hasMonitorNode={nodes.some(n => 
+                    n.data.type === 'monitorTags' || n.data.type === 'monitorSensorValues'
+                  )}
+                  hasAIAnalysisNode={nodes.some(n => n.data.type === 'queryPinecone')}
+                  existingNodeTypes={nodes.map(n => n.data.type)}
+                  onAddNode={(node) => {
+                    // Helper function to get machineType from machineId
+                    const getMachineType = (machineId: string): string => {
+                      if (machineId.startsWith('lathe')) return 'lathe';
+                      if (machineId.startsWith('machine-')) return 'bottlefiller';
+                      return 'bottlefiller'; // default
+                    };
+
+                    // Find Connect Machine node and extract machineId
+                    const connectMachineNode = nodes.find(n => n.data.type === 'startAgent');
+                    const machineId = connectMachineNode?.data.config?.machineId;
+
+                    // Build config with auto-populated machineId if needed
+                    let config = { ...(node.config || {}) };
+
+                    // Ensure service is set for startAgent nodes
+                    if (node.type === 'startAgent') {
+                      if (!config.service) config.service = 'mock_plc';
+                      if (config.machineId === undefined) config.machineId = '';
+                    }
+
+                    // Auto-populate machineId for nodes that need it
+                    if (machineId && machineId.trim() !== '') {
+                      const nodeTypesNeedingMachineId = ['monitorTags', 'queryPinecone'];
+                      if (nodeTypesNeedingMachineId.includes(node.type)) {
+                        config.machineId = machineId;
+                        
+                        // For queryPinecone, also set machineType
+                        if (node.type === 'queryPinecone') {
+                          config.machineType = getMachineType(machineId);
+                        }
+                      }
+                    }
+
+                    const newNode = {
+                      id: `node-${Date.now()}`,
+                      type: 'tool-node',
+                      position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
+                      data: {
+                        type: node.type,
+                        config,
+                        label: node.name,
+                      },
+                    };
+                    console.log('📦 [WORKFLOW] Node created:', {
+                      id: newNode.id,
                       type: node.type,
-                      config: node.config || {},
                       label: node.name,
-                    },
-                  };
-                  console.log('📦 [WORKFLOW] Node created:', {
-                    id: newNode.id,
-                    type: node.type,
-                    label: node.name,
-                    config: newNode.data.config,
-                  });
-                  setNodes(prev => {
-                    const updated = [...prev, newNode];
-                    console.log('   Total nodes in workflow:', updated.length);
-                    return updated;
-                  });
-                }} />
+                      config: newNode.data.config,
+                      machineIdAutoPopulated: machineId && machineId.trim() !== '' && ['monitorTags', 'queryPinecone'].includes(node.type),
+                    });
+                    setNodes(prev => {
+                      const updated = [...prev, newNode];
+                      console.log('   Total nodes in workflow:', updated.length);
+                      return updated;
+                    });
+                  }} 
+                />
               )}
             </div>
 

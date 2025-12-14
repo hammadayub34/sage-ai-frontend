@@ -469,7 +469,7 @@ export async function startAgentTool(
  */
 export async function monitorTagsTool(
   state: WorkflowState,
-  config: { machineId: string; timeRange?: string; threshold?: number },
+  config: { machineId: string; timeRange?: string; threshold?: number; machineType?: string; selectedSafetyTags?: string | string[]; selectedAlarmTags?: string | string[] },
   logBoth?: (message: string) => void
 ): Promise<WorkflowState> {
   const log = state.executionLog || [];
@@ -477,9 +477,80 @@ export async function monitorTagsTool(
   const timeRange = config.timeRange || '-24h';
   const threshold = config.threshold || 50;
 
+  // Helper function to get machineType from machineId
+  const getMachineType = (machineId: string): string => {
+    if (machineId.startsWith('lathe')) return 'lathe';
+    if (machineId.startsWith('machine-')) return 'bottlefiller';
+    return 'bottlefiller'; // default
+  };
+
+  // Infer machineType from machineId if not provided
+  const machineType = config.machineType || getMachineType(machineId);
+
+  // Get selected tags from config (can be 'All', array of strings, or undefined)
+  const selectedSafetyTags = config.selectedSafetyTags || 'All';
+  const selectedAlarmTags = config.selectedAlarmTags || 'All';
+
+  // Determine which tags to monitor
+  let safetyTagsToMonitor: string[] = [];
+  let alarmTagsToMonitor: string[] = [];
+
+  if (machineType === 'lathe') {
+    const allSafetyTags = ['DoorClosed', 'EStopOK'];
+    const allAlarmTags = [
+      'AlarmSpindleOverload',
+      'AlarmChuckNotClamped',
+      'AlarmDoorOpen',
+      'AlarmToolWear',
+      'AlarmCoolantLow'
+    ];
+    
+    // Safety tags - handle 'All', array, or undefined
+    if (selectedSafetyTags === 'All' || !selectedSafetyTags) {
+      safetyTagsToMonitor = allSafetyTags;
+    } else if (Array.isArray(selectedSafetyTags)) {
+      safetyTagsToMonitor = selectedSafetyTags;
+    } else {
+      safetyTagsToMonitor = [selectedSafetyTags];
+    }
+    
+    // Alarm tags - handle 'All', array, or undefined
+    if (selectedAlarmTags === 'All' || !selectedAlarmTags) {
+      alarmTagsToMonitor = allAlarmTags;
+    } else if (Array.isArray(selectedAlarmTags)) {
+      alarmTagsToMonitor = selectedAlarmTags;
+    } else {
+      alarmTagsToMonitor = [selectedAlarmTags];
+    }
+  } else {
+    // Bottlefiller - no safety tags
+    const allAlarmTags = [
+      'AlarmFault',
+      'AlarmOverfill',
+      'AlarmUnderfill',
+      'AlarmLowProductLevel',
+      'AlarmCapMissing'
+    ];
+    
+    // Alarm tags - handle 'All', array, or undefined
+    if (selectedAlarmTags === 'All' || !selectedAlarmTags) {
+      alarmTagsToMonitor = allAlarmTags;
+    } else if (Array.isArray(selectedAlarmTags)) {
+      alarmTagsToMonitor = selectedAlarmTags;
+    } else {
+      alarmTagsToMonitor = [selectedAlarmTags];
+    }
+  }
+
   log.push(`📊 Monitoring tags for ${machineId} (threshold: ${threshold})...`);
   if (logBoth) logBoth(`   📊 [TOOL] monitorTagsTool called`);
-  if (logBoth) logBoth(`      Machine: ${machineId}, Time Range: ${timeRange}, Threshold: ${threshold}`);
+  if (logBoth) logBoth(`      Machine: ${machineId}, Machine Type: ${machineType}, Time Range: ${timeRange}, Threshold: ${threshold}`);
+  if (logBoth && safetyTagsToMonitor.length > 0) {
+    logBoth(`      Safety Tags: ${safetyTagsToMonitor.join(', ')}`);
+  }
+  if (logBoth) {
+    logBoth(`      Alarm Tags: ${alarmTagsToMonitor.join(', ')}`);
+  }
 
   try {
     const baseUrl = getBaseUrl();
@@ -489,20 +560,40 @@ export async function monitorTagsTool(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         machineId,
+        machineType,
         timeRange,
         customThreshold: threshold,
+        safetyTags: safetyTagsToMonitor,
+        alarmTags: alarmTagsToMonitor,
       }),
     });
 
     const result = await response.json();
 
     if (response.ok) {
-      const alarmsExceedingThreshold = result.alarmsExceedingThreshold || [];
-      log.push(`✅ Found ${alarmsExceedingThreshold.length} alarm(s) exceeding threshold`);
+      // API returns exceededAlarms as array of strings, not objects
+      const exceededAlarms = result.exceededAlarms || []; // Array of strings like ["AlarmFault", "AlarmOverfill"]
+      const alarmCounts = result.alarmCounts || []; // Array of objects with {alarmType, count, threshold, exceeded}
+
+      // Transform exceededAlarms strings to full alarm objects using alarmCounts
+      // Remove duplicates by using a Map to track seen alarm types
+      const seenAlarms = new Map<string, any>();
+      exceededAlarms.forEach((alarmType: string) => {
+        if (!seenAlarms.has(alarmType)) {
+          const alarmObj = alarmCounts.find((ac: any) => ac.alarmType === alarmType);
+          if (alarmObj) {
+            seenAlarms.set(alarmType, alarmObj);
+          }
+        }
+      });
+      const exceededAlarmObjects = Array.from(seenAlarms.values());
+
+      log.push(`✅ Found ${exceededAlarmObjects.length} alarm(s) exceeding threshold`);
       
-      if (alarmsExceedingThreshold.length > 0) {
-        log.push(`   Alarms: ${alarmsExceedingThreshold.map((a: any) => a.alarmType).join(', ')}`);
-        if (logBoth) logBoth(`      ✅ Result: Found ${alarmsExceedingThreshold.length} alarm(s): ${alarmsExceedingThreshold.map((a: any) => a.alarmType).join(', ')}`);
+      if (exceededAlarmObjects.length > 0) {
+        const alarmSummary = exceededAlarmObjects.map((a: any) => `${a.alarmType} (${a.count}/${a.threshold})`).join(', ');
+        log.push(`   Alarms: ${alarmSummary}`);
+        if (logBoth) logBoth(`      ✅ Result: Found ${exceededAlarmObjects.length} alarm(s): ${alarmSummary}`);
       } else {
         if (logBoth) logBoth(`      ✅ Result: No alarms exceeding threshold`);
       }
@@ -511,8 +602,11 @@ export async function monitorTagsTool(
         ...state,
         machineId,
         alarmData: {
-          alarms: alarmsExceedingThreshold,
-          firstAlarm: alarmsExceedingThreshold[0] || null,
+          alarms: exceededAlarmObjects, // Array of alarm objects
+          firstAlarm: exceededAlarmObjects[0] || null, // First alarm object for downstream nodes
+          exceededAlarms, // Keep strings for reference
+          machineType, // Store machine type
+          alarmCounts, // Store all counts for reference
         },
         executionLog: log,
       };
@@ -544,7 +638,8 @@ export async function queryPineconeTool(
   
   const machineId = config.machineId || state.machineId || 'machine-01';
   const alarmType = config.alarmType || firstAlarm?.alarmType || '';
-  const machineType = config.machineType || firstAlarm?.machineType || 'bottlefiller';
+  // Use machineType from alarmData (stored by monitorTagsTool) or config, with fallback
+  const machineType = config.machineType || alarmData?.machineType || 'bottlefiller';
 
   if (logBoth) logBoth(`   🔍 [TOOL] queryPineconeTool called`);
   if (logBoth) logBoth(`      Machine: ${machineId}, Alarm Type: ${alarmType}, Machine Type: ${machineType}`);
@@ -594,27 +689,32 @@ export async function queryPineconeTool(
 
 /**
  * Monitor Sensor Values Tool
- * Queries InfluxDB for current sensor values and tag data
+ * Queries InfluxDB for current sensor values or vibration data
  */
 export async function monitorSensorValuesTool(
   state: WorkflowState,
-  config: { machineId: string; timeRange?: string; machineType?: string },
+  config: { machineId: string; timeRange?: string; sensorType?: string },
   logBoth?: (message: string) => void
 ): Promise<WorkflowState> {
   const log = state.executionLog || [];
   const machineId = config.machineId || state.machineId || 'machine-01';
   const timeRange = config.timeRange || '-5m';
-  const machineType = config.machineType;
+  const sensorType = config.sensorType || 'current';
 
-  log.push(`📊 Monitoring sensor values for ${machineId}...`);
+  log.push(`📊 Monitoring ${sensorType} sensor values for ${machineId}...`);
   if (logBoth) logBoth(`   📊 [TOOL] monitorSensorValuesTool called`);
-  if (logBoth) logBoth(`      Machine: ${machineId}, Time Range: ${timeRange}${machineType ? `, Machine Type: ${machineType}` : ''}`);
+  if (logBoth) logBoth(`      Machine: ${machineId}, Sensor Type: ${sensorType}, Time Range: ${timeRange}`);
 
   try {
     const baseUrl = getBaseUrl();
-    let url = `${baseUrl}/api/influxdb/latest?machineId=${machineId}&timeRange=${timeRange}`;
-    if (machineType) {
-      url += `&machineType=${machineType}`;
+    let url: string;
+    
+    if (sensorType === 'vibration') {
+      // Use vibration API endpoint
+      url = `${baseUrl}/api/influxdb/vibration?machineId=${machineId}&timeRange=${timeRange}`;
+    } else {
+      // Use latest API endpoint for current values
+      url = `${baseUrl}/api/influxdb/latest?machineId=${machineId}&timeRange=${timeRange}`;
     }
     
     if (logBoth) logBoth(`      Calling: ${url}`);
@@ -624,38 +724,47 @@ export async function monitorSensorValuesTool(
 
     const result = await response.json();
 
-    if (response.ok && result.data) {
-      const sensorData = result.data;
-      const fieldCount = Object.keys(sensorData).length;
+    if (response.ok && (result.data || (sensorType === 'vibration' && result.data !== undefined))) {
+      const sensorData = sensorType === 'vibration' ? result.data : result.data;
       
-      log.push(`✅ Retrieved ${fieldCount} sensor value(s) for ${machineId}`);
-      if (logBoth) logBoth(`      ✅ Result: Retrieved ${fieldCount} sensor values`);
-      
-      // Log some key sensor values
-      const keyFields = ['BottlesFilled', 'BottlesPerMinute', 'FillLevel', 'TankTemperature', 'SystemRunning', 'Fault'];
-      const keyValues: string[] = [];
-      for (const field of keyFields) {
-        if (sensorData[field] !== undefined) {
-          keyValues.push(`${field}=${sensorData[field]}`);
-        }
-      }
-      if (keyValues.length > 0) {
-        if (logBoth) logBoth(`      📈 Key values: ${keyValues.join(', ')}`);
-      }
+      if (sensorType === 'vibration') {
+        // Vibration data is an array of data points
+        const dataPointCount = Array.isArray(sensorData) ? sensorData.length : 0;
+        log.push(`✅ Retrieved ${dataPointCount} vibration data point(s) for ${machineId}`);
+        if (logBoth) logBoth(`      ✅ Result: Retrieved ${dataPointCount} vibration data points`);
+        
+        return {
+          ...state,
+          machineId,
+          sensorData: {
+            sensorType: 'vibration',
+            timestamp: result.timestamp || new Date().toISOString(),
+            values: sensorData,
+            dataPointCount,
+          },
+          executionLog: log,
+        };
+      } else {
+        // Current sensor data
+        const fieldCount = Object.keys(sensorData).length;
+        log.push(`✅ Retrieved ${fieldCount} sensor value(s) for ${machineId}`);
+        if (logBoth) logBoth(`      ✅ Result: Retrieved ${fieldCount} sensor values`);
 
-      return {
-        ...state,
-        machineId,
-        sensorData: {
-          timestamp: result.timestamp || sensorData._time,
-          values: sensorData,
-          fieldCount,
-        },
-        executionLog: log,
-      };
+        return {
+          ...state,
+          machineId,
+          sensorData: {
+            sensorType: 'current',
+            timestamp: result.timestamp || sensorData._time,
+            values: sensorData,
+            fieldCount,
+          },
+          executionLog: log,
+        };
+      }
     } else if (response.status === 404) {
-      log.push(`⚠️ No sensor data found for ${machineId}`);
-      if (logBoth) logBoth(`      ⚠️  Result: No data found for ${machineId}`);
+      log.push(`⚠️ No ${sensorType} sensor data found for ${machineId}`);
+      if (logBoth) logBoth(`      ⚠️  Result: No ${sensorType} data found for ${machineId}`);
       return {
         ...state,
         machineId,
@@ -707,7 +816,7 @@ export async function createWorkOrderTool(
     weekNo: weekNo.toString(),
     weekOf: now.toISOString().split('T')[0],
     machineId,
-    machineType: pineconeData.machineType || alarmData?.firstAlarm?.machineType || 'bottlefiller',
+    machineType: pineconeData.machineType || alarmData?.machineType || 'bottlefiller',
     alarmType: alarmData?.firstAlarm?.alarmType || '',
     status: 'pending',
     priority: pineconeData.priority || 'Medium',

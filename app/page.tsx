@@ -181,7 +181,7 @@ export default function Dashboard() {
                   <div className="space-y-4">
                     <div className="bg-dark-bg rounded-lg border border-dark-border p-4">
                       <h4 className="text-md font-medium mb-2 text-gray-300">Live Video Feed</h4>
-                      <div className="aspect-video bg-dark-panel rounded border border-dark-border flex items-center justify-center">
+                      <div className="aspect-video bg-dark-panel rounded border border-dark-border flex items-center justify-center max-w-xl mx-auto">
                         <div className="text-center text-gray-500">
                           <p className="text-sm">Video feed will appear here</p>
                         </div>

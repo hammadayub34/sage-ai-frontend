@@ -27,6 +27,49 @@ interface WorkflowCanvasProps {
 
 // Custom node component with connection handles
 const ToolNode = ({ data }: { data: any }) => {
+  // Determine what to display below the label
+  const getConfigDisplay = () => {
+    if (!data.config || Object.keys(data.config).length === 0) {
+      return null;
+    }
+    
+    // For Connect Machine (startAgent), show machineId if available
+    // Check both data.type (from node data) and data.config.service
+    const nodeType = data.type;
+    if (nodeType === 'startAgent' && data.config.machineId) {
+      return <div className="text-[10px] text-gray-400 mt-0.5 truncate">Machine: {data.config.machineId}</div>;
+    }
+    
+    // For Monitor Sensor Values, show sensorType and timeRange (no machineId)
+    if (data.type === 'monitorSensorValues') {
+      const parts = [];
+      if (data.config.sensorType) parts.push(data.config.sensorType);
+      if (data.config.timeRange) parts.push(data.config.timeRange);
+      if (parts.length > 0) {
+        return <div className="text-[10px] text-gray-400 mt-0.5 truncate">{parts.join(' • ')}</div>;
+      }
+    }
+    
+    // For Monitor Tags, show machineId and threshold
+    if (data.type === 'monitorTags') {
+      const parts = [];
+      if (data.config.machineId) parts.push(data.config.machineId);
+      if (data.config.threshold) parts.push(`threshold: ${data.config.threshold}`);
+      if (parts.length > 0) {
+        return <div className="text-[10px] text-gray-400 mt-0.5 truncate">{parts.join(' • ')}</div>;
+      }
+    }
+    
+    // Default: show first config entry
+    const firstEntry = Object.entries(data.config)[0];
+    if (firstEntry) {
+      const [key, value] = firstEntry;
+      return <div className="text-[10px] text-gray-400 mt-0.5 truncate">{key}: {String(value).substring(0, 15)}</div>;
+    }
+    
+    return null;
+  };
+  
   return (
     <div className="px-3 py-2 bg-dark-bg border border-sage-500 rounded shadow min-w-[120px] max-w-[180px]">
       {/* Input handle (left side) */}
@@ -37,13 +80,7 @@ const ToolNode = ({ data }: { data: any }) => {
       />
       
       <div className="text-white text-xs font-medium">{data.label}</div>
-      {data.config && Object.keys(data.config).length > 0 && (
-        <div className="text-[10px] text-gray-400 mt-0.5">
-          {Object.entries(data.config).slice(0, 1).map(([key, value]) => (
-            <div key={key} className="truncate">{key}: {String(value).substring(0, 15)}</div>
-          ))}
-        </div>
-      )}
+      {getConfigDisplay()}
       
       {/* Output handle (right side) */}
       <Handle
@@ -71,17 +108,42 @@ export function WorkflowCanvas({
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const isInternalUpdateRef = useRef(false);
 
-  // Sync initial nodes/edges when they change from parent (e.g., Load Example, Clear)
+  // Sync initial nodes/edges when they change from parent (e.g., Load Example, Clear, or config updates)
   useEffect(() => {
     if (isInternalUpdateRef.current) {
       isInternalUpdateRef.current = false;
       return;
     }
     
+    // Check if nodes were added/removed (by ID)
     const currentIds = nodes.map(n => n.id).sort().join(',');
     const incomingIds = initialNodes.map(n => n.id).sort().join(',');
     
     if (currentIds !== incomingIds) {
+      setNodes(initialNodes);
+      return;
+    }
+    
+    // Check if node data has changed (e.g., config updates)
+    // Compare each node's data to detect changes
+    let dataChanged = false;
+    if (nodes.length === initialNodes.length) {
+      for (let i = 0; i < nodes.length; i++) {
+        const currentNode = nodes[i];
+        const incomingNode = initialNodes.find(n => n.id === currentNode.id);
+        if (incomingNode) {
+          // Deep compare data objects
+          const currentDataStr = JSON.stringify(currentNode.data);
+          const incomingDataStr = JSON.stringify(incomingNode.data);
+          if (currentDataStr !== incomingDataStr) {
+            dataChanged = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (dataChanged) {
       setNodes(initialNodes);
     }
   }, [initialNodes, setNodes, nodes]);
@@ -163,6 +225,39 @@ export function WorkflowCanvas({
         y: event.clientY,
       });
 
+      // Helper function to get machineType from machineId
+      const getMachineType = (machineId: string): string => {
+        if (machineId.startsWith('lathe')) return 'lathe';
+        if (machineId.startsWith('machine-')) return 'bottlefiller';
+        return 'bottlefiller'; // default
+      };
+
+      // Find Connect Machine node and extract machineId
+      const connectMachineNode = nodes.find(n => n.data.type === 'startAgent');
+      const machineId = connectMachineNode?.data.config?.machineId;
+
+      // Build config with auto-populated machineId if needed
+      let config = { ...(nodeData.config || {}) };
+
+      // Ensure service is set for startAgent nodes
+      if (nodeData.type === 'startAgent') {
+        if (!config.service) config.service = 'mock_plc';
+        if (config.machineId === undefined) config.machineId = '';
+      }
+
+      // Auto-populate machineId for nodes that need it
+      if (machineId && machineId.trim() !== '') {
+        const nodeTypesNeedingMachineId = ['monitorTags', 'queryPinecone'];
+        if (nodeTypesNeedingMachineId.includes(nodeData.type)) {
+          config.machineId = machineId;
+          
+          // For queryPinecone, also set machineType
+          if (nodeData.type === 'queryPinecone') {
+            config.machineType = getMachineType(machineId);
+          }
+        }
+      }
+
       const newNode: Node = {
         id: `node-${Date.now()}`,
         type: 'tool-node',
@@ -170,13 +265,7 @@ export function WorkflowCanvas({
         data: {
           label: nodeData.name,
           type: nodeData.type,
-          config: {
-            ...(nodeData.config || {}),
-            // Ensure service is set for startAgent nodes
-            ...(nodeData.type === 'startAgent' && !nodeData.config?.service ? { service: 'mock_plc' } : {}),
-            // Ensure machineId exists for startAgent nodes (even if empty)
-            ...(nodeData.type === 'startAgent' && nodeData.config?.machineId === undefined ? { machineId: '' } : {}),
-          },
+          config,
         },
       };
 
@@ -188,7 +277,7 @@ export function WorkflowCanvas({
         return updatedNodes;
       });
     },
-    [setNodes, onNodesChange, reactFlowInstance]
+    [setNodes, onNodesChange, reactFlowInstance, nodes]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {

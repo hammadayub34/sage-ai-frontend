@@ -185,14 +185,27 @@ export function buildWorkflow(definition: WorkflowDefinition, onLog?: (message: 
     const nextNodeIds = adjacencyList[nodeId] || [];
     
     if (nextNodeIds.length > 0) {
-      logBoth(`➡️  [WORKFLOW] Node ${nodeId} has ${nextNodeIds.length} next node(s): ${nextNodeIds.join(', ')}`);
+      logBoth(`\n➡️  [WORKFLOW] Node ${nodeId} completed. Checking for next node(s)...`);
+      logBoth(`   Found ${nextNodeIds.length} next node(s): ${nextNodeIds.join(', ')}`);
+      
+      // Execute next nodes sequentially
+      for (let i = 0; i < nextNodeIds.length; i++) {
+        const nextNodeId = nextNodeIds[i];
+        const nextNode = nodeMap.get(nextNodeId);
+        const nodeNumber = i + 1;
+        const nodeLabel = nextNode?.data.config?.label || nextNode?.data.type || nextNodeId;
+        
+        logBoth(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        logBoth(`➡️  [WORKFLOW] Moving to next node (Node ${nodeNumber} of ${nextNodeIds.length})`);
+        logBoth(`   Node ID: ${nextNodeId}`);
+        logBoth(`   Node Label: ${nodeLabel}`);
+        logBoth(`   Node Type: ${nextNode?.data.type || 'unknown'}`);
+        logBoth(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+        
+        currentState = await executeFromNode(nextNodeId, currentState);
+      }
     } else {
-      logBoth(`🏁 [WORKFLOW] Node ${nodeId} is the end node`);
-    }
-
-    // Execute next nodes sequentially
-    for (const nextNodeId of nextNodeIds) {
-      currentState = await executeFromNode(nextNodeId, currentState);
+      logBoth(`\n🏁 [WORKFLOW] Node ${nodeId} is the end node - no more nodes to execute`);
     }
 
     return currentState;
