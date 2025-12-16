@@ -1,7 +1,7 @@
 'use client';
 
 import { TagsTable } from '@/components/TagsTable';
-import { ServiceControls } from '@/components/ServiceControls';
+import { ServiceControlsButton } from '@/components/ServiceControlsButton';
 import { TimeSeriesChart } from '@/components/TimeSeriesChart';
 import { AlarmHistory } from '@/components/AlarmHistory';
 import { AlarmEvents } from '@/components/AlarmEvents';
@@ -45,11 +45,11 @@ export default function Dashboard() {
 
   return (
     <div className="bg-dark-bg text-dark-text p-6 min-h-screen">
+      {/* Service Controls Icon Button (floating) */}
+      <ServiceControlsButton machineId={machineId} />
+      
       {/* Header */}
       <div className="mb-6">
-        {/* Service Controls */}
-        <ServiceControls machineId={machineId} />
-        
         {/* Machine Type and Selection */}
         <div className="flex items-center justify-between gap-4 mt-4">
           <div className="flex items-center gap-4">
