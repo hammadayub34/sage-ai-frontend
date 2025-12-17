@@ -3,7 +3,7 @@
  * Checks saved workflows every minute and executes them when scheduled time arrives
  */
 
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import { readdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -17,7 +17,7 @@ interface ScheduledWorkflow {
     type: 'deferred' | 'recurring' | 'none';
     enabled: boolean;
     executeAt?: string; // ISO timestamp
-    interval?: string; // '5m', '30m', '1h', '6h', '24h'
+    interval?: string;  // '5m', '30m', '1h', '6h', '24h'
   };
   createdAt: string;
   updatedAt: string;
@@ -25,15 +25,12 @@ interface ScheduledWorkflow {
 
 class WorkflowScheduler {
   private isRunning = false;
-  private cronJob: cron.ScheduledTask | null = null;
+  private cronJob: ScheduledTask | null = null; // ✅ Fixed type
 
   get running(): boolean {
     return this.isRunning;
   }
 
-  /**
-   * Start the scheduler - runs every minute
-   */
   start() {
     if (this.isRunning) {
       console.log('[Scheduler] Already running');
@@ -41,23 +38,20 @@ class WorkflowScheduler {
     }
 
     console.log('[Scheduler] Starting workflow scheduler...');
-    
+
     // Run every minute: * * * * *
     this.cronJob = cron.schedule('* * * * *', async () => {
       await this.checkAndExecuteWorkflows();
     });
 
     this.isRunning = true;
-    
+
     // Also check immediately on startup
     this.checkAndExecuteWorkflows();
-    
+
     console.log('[Scheduler] Scheduler started - checking workflows every minute');
   }
 
-  /**
-   * Stop the scheduler
-   */
   stop() {
     if (this.cronJob) {
       this.cronJob.stop();
@@ -67,9 +61,6 @@ class WorkflowScheduler {
     console.log('[Scheduler] Scheduler stopped');
   }
 
-  /**
-   * Check all saved workflows and execute those that are ready
-   */
   private async checkAndExecuteWorkflows() {
     try {
       const workflows = await this.loadScheduledWorkflows();
@@ -85,11 +76,9 @@ class WorkflowScheduler {
           console.log(`[Scheduler] Executing workflow: ${workflow.name} (${workflow.id})`);
           await this.executeWorkflow(workflow);
 
-          // If recurring, update executeAt to next interval
           if (workflow.schedule.type === 'recurring' && workflow.schedule.interval) {
             await this.updateNextExecution(workflow);
           } else if (workflow.schedule.type === 'deferred') {
-            // One-time execution - disable after running
             await this.disableWorkflow(workflow);
           }
         }
@@ -99,30 +88,19 @@ class WorkflowScheduler {
     }
   }
 
-  /**
-   * Load all saved workflows that have schedules enabled
-   */
   private async loadScheduledWorkflows(): Promise<ScheduledWorkflow[]> {
     const workflowsDir = path.join(process.cwd(), 'data', 'workflows');
 
-    if (!existsSync(workflowsDir)) {
-      return [];
-    }
+    if (!existsSync(workflowsDir)) return [];
 
     const files = await readdir(workflowsDir);
-    const jsonFiles = files.filter(file => file.endsWith('.json'));
-
     const workflows: ScheduledWorkflow[] = [];
 
-    for (const file of jsonFiles) {
+    for (const file of files.filter(f => f.endsWith('.json'))) {
       try {
-        const filePath = path.join(workflowsDir, file);
-        const content = await readFile(filePath, 'utf-8');
+        const content = await readFile(path.join(workflowsDir, file), 'utf-8');
         const workflow = JSON.parse(content) as ScheduledWorkflow;
-
-        if (workflow.schedule && workflow.schedule.enabled) {
-          workflows.push(workflow);
-        }
+        if (workflow.schedule.enabled) workflows.push(workflow);
       } catch (error) {
         console.error(`[Scheduler] Error reading workflow file ${file}:`, error);
       }
@@ -131,9 +109,6 @@ class WorkflowScheduler {
     return workflows;
   }
 
-  /**
-   * Execute a workflow by calling the execute API endpoint
-   */
   private async executeWorkflow(workflow: ScheduledWorkflow) {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3005';
@@ -142,10 +117,7 @@ class WorkflowScheduler {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nodes: workflow.nodes,
-          edges: workflow.edges,
-        }),
+        body: JSON.stringify({ nodes: workflow.nodes, edges: workflow.edges }),
       });
 
       if (!response.ok) {
@@ -154,7 +126,6 @@ class WorkflowScheduler {
         return;
       }
 
-      // For streaming response, we just log that it started
       const contentType = response.headers.get('content-type');
       if (contentType?.includes('text/event-stream')) {
         console.log(`[Scheduler] Workflow ${workflow.name} execution started (streaming)`);
@@ -171,17 +142,12 @@ class WorkflowScheduler {
     }
   }
 
-  /**
-   * Calculate next execution time based on interval
-   */
   private calculateNextExecution(interval: string): Date {
     const now = new Date();
     const next = new Date(now);
-
-    // Parse interval: '5m', '30m', '1h', '6h', '24h'
     const match = interval.match(/^(\d+)([mh])$/);
+
     if (!match) {
-      // Default to 1 hour if invalid
       next.setHours(next.getHours() + 1);
       return next;
     }
@@ -189,27 +155,23 @@ class WorkflowScheduler {
     const value = parseInt(match[1]);
     const unit = match[2];
 
-    if (unit === 'm') {
-      next.setMinutes(next.getMinutes() + value);
-    } else if (unit === 'h') {
-      next.setHours(next.getHours() + value);
-    }
+    if (unit === 'm') next.setMinutes(next.getMinutes() + value);
+    else if (unit === 'h') next.setHours(next.getHours() + value);
 
     return next;
   }
 
-  /**
-   * Update workflow file with next execution time
-   */
   private async updateNextExecution(workflow: ScheduledWorkflow) {
     try {
       const nextTime = this.calculateNextExecution(workflow.schedule.interval!);
       workflow.schedule.executeAt = nextTime.toISOString();
       workflow.updatedAt = new Date().toISOString();
 
-      const workflowsDir = path.join(process.cwd(), 'data', 'workflows');
-      const filePath = path.join(workflowsDir, `${workflow.id}.json`);
-      await writeFile(filePath, JSON.stringify(workflow, null, 2), 'utf-8');
+      await writeFile(
+        path.join(process.cwd(), 'data', 'workflows', `${workflow.id}.json`),
+        JSON.stringify(workflow, null, 2),
+        'utf-8'
+      );
 
       console.log(`[Scheduler] Updated ${workflow.name} - next execution: ${nextTime.toISOString()}`);
     } catch (error: any) {
@@ -217,17 +179,16 @@ class WorkflowScheduler {
     }
   }
 
-  /**
-   * Disable workflow after one-time execution
-   */
   private async disableWorkflow(workflow: ScheduledWorkflow) {
     try {
       workflow.schedule.enabled = false;
       workflow.updatedAt = new Date().toISOString();
 
-      const workflowsDir = path.join(process.cwd(), 'data', 'workflows');
-      const filePath = path.join(workflowsDir, `${workflow.id}.json`);
-      await writeFile(filePath, JSON.stringify(workflow, null, 2), 'utf-8');
+      await writeFile(
+        path.join(process.cwd(), 'data', 'workflows', `${workflow.id}.json`),
+        JSON.stringify(workflow, null, 2),
+        'utf-8'
+      );
 
       console.log(`[Scheduler] Disabled one-time workflow: ${workflow.name}`);
     } catch (error: any) {
@@ -236,12 +197,10 @@ class WorkflowScheduler {
   }
 }
 
-// Singleton instance
+// Singleton
 let schedulerInstance: WorkflowScheduler | null = null;
 
 export function getWorkflowScheduler(): WorkflowScheduler {
-  if (!schedulerInstance) {
-    schedulerInstance = new WorkflowScheduler();
-  }
+  if (!schedulerInstance) schedulerInstance = new WorkflowScheduler();
   return schedulerInstance;
 }
