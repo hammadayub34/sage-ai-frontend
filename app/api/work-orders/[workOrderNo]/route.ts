@@ -7,10 +7,10 @@ const WORK_ORDERS_BUCKET = process.env.NEXT_PUBLIC_WORK_ORDERS_BUCKET || 'work_o
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { workOrderNo: string } }
+  { params }: { params: Promise<{ workOrderNo: string }> }
 ) {
   try {
-    const { workOrderNo } = params;
+    const { workOrderNo } = await params;
     
     if (!workOrderNo) {
       return NextResponse.json(
@@ -70,4 +70,3 @@ export async function DELETE(
     );
   }
 }
-
