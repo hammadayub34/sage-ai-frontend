@@ -280,3 +280,21 @@ export const SignOutIcon = ({ className = "w-6 h-6", size }: IconProps) => (
   </svg>
 );
 
+export const ArrowUpIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ArrowDownIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ArrowRightIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z" fill="currentColor"/>
+  </svg>
+);
+

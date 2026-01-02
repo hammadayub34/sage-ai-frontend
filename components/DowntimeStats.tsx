@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ClockIcon, TrendingUpIcon } from './Icons';
+import { ClockIcon, TrendingUpIcon, ArrowUpIcon, ArrowDownIcon, ArrowRightIcon } from './Icons';
 
 interface DowntimeStatsProps {
   machineId: string;
@@ -22,6 +22,11 @@ interface DowntimeStats {
   totalUptime: number;
   incidentCount: number;
   periods: DowntimePeriod[];
+  comparison?: {
+    previousDowntimePercentage: number;
+    change: number;
+    trend: 'increasing' | 'decreasing' | 'same';
+  };
 }
 
 async function fetchDowntimeStats(
@@ -131,10 +136,33 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
         {/* Downtime Percentage */}
         <div className="bg-dark-bg border border-dark-border rounded p-4">
           <div className="text-gray-400 text-sm mb-1">Downtime</div>
-          <div className="text-3xl font-bold text-red-400">{stats.downtimePercentage.toFixed(1)}%</div>
+          <div className="flex items-center gap-2">
+            <div className="text-3xl font-bold text-red-400">{stats.downtimePercentage.toFixed(1)}%</div>
+            {stats.comparison && (
+              <div className={`flex items-center gap-1 px-2 py-1 rounded ${
+                stats.comparison.trend === 'increasing' 
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                  : stats.comparison.trend === 'decreasing'
+                  ? 'bg-sage-500/20 text-sage-400 border border-sage-500/30'
+                  : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+              }`}>
+                {stats.comparison.trend === 'increasing' && <ArrowUpIcon className="w-4 h-4" />}
+                {stats.comparison.trend === 'decreasing' && <ArrowDownIcon className="w-4 h-4" />}
+                {stats.comparison.trend === 'same' && <ArrowRightIcon className="w-4 h-4" />}
+                <span className="text-xs font-medium">
+                  {stats.comparison.change.toFixed(1)}%
+                </span>
+              </div>
+            )}
+          </div>
           <div className="text-xs text-gray-500 mt-1">
             {stats.incidentCount > 0 ? `${stats.incidentCount} incident${stats.incidentCount === 1 ? '' : 's'}` : 'No downtime'}
           </div>
+          {stats.comparison && (
+            <div className="text-xs text-gray-600 mt-1">
+              Previous: {stats.comparison.previousDowntimePercentage.toFixed(1)}%
+            </div>
+          )}
         </div>
 
         {/* Uptime Percentage */}

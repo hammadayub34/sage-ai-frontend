@@ -26,6 +26,11 @@ interface DowntimeStats {
   totalUptime: number;
   incidentCount: number;
   periods: DowntimePeriod[];
+  comparison?: {
+    previousDowntimePercentage: number;
+    change: number; // positive = increase, negative = decrease
+    trend: 'increasing' | 'decreasing' | 'same';
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -115,25 +120,55 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // For downtime calculation, we want to calculate for the REQUESTED time range (from NOW backwards)
-    // NOT from the latest data point. This ensures we're calculating downtime for the actual time period requested.
-    // If data is older than the range, we still calculate for the requested range, but may find no data.
+    // Match vibration API logic: use latestTime for end time and extend start time if needed
+    // This ensures downtime calculates for the same period that vibration chart shows
+    let actualStartTime = startTime;
     
-    const actualStartTime = startTime; // Use the requested start time (e.g., 24h ago from NOW)
-    const actualEndTime = endTime; // Always use NOW as the end time
+    // If we found latest data and it's older than our time range, extend the range (like vibration API)
+    if (latestTime) {
+      const timeDiff = startTime.getTime() - latestTime.getTime();
+      if (timeDiff > 0) {
+        // Latest data is older than requested range, extend to include it
+        console.log(`[Downtime API] Latest data is ${Math.round(timeDiff / (1000 * 60 * 60))} hours older than requested range. Extending range.`);
+        const extendedStart = new Date(latestTime.getTime() - (24 * 60 * 60 * 1000)); // Go back 1 day from latest data
+        // Ensure extended start is before latestTime
+        if (extendedStart.getTime() < latestTime.getTime()) {
+          actualStartTime = extendedStart;
+        } else {
+          // Fallback: use latestTime - 1 hour if extension would be invalid
+          actualStartTime = new Date(latestTime.getTime() - (60 * 60 * 1000));
+          console.warn(`[Downtime API] Extended start time would be invalid, using 1 hour before latestTime`);
+        }
+      }
+    }
+    
     const actualStartTimeStr = actualStartTime.toISOString();
+    const actualEndTime = latestTime || endTime; // Use latestTime if available, otherwise NOW (matching vibration API)
     const actualEndTimeStr = actualEndTime.toISOString();
     const actualTotalTimeSeconds = (actualEndTime.getTime() - actualStartTime.getTime()) / 1000;
     
-    console.log(`[Downtime API] Using REQUESTED time range (not latest data point):`);
-    if (latestTime) {
-      const timeDiff = endTime.getTime() - latestTime.getTime();
-      console.log(`[Downtime API] Latest data is ${Math.round(timeDiff / (1000 * 60 * 60))} hours old`);
-      if (timeDiff > actualTotalTimeSeconds) {
-        console.log(`[Downtime API] ⚠️  Latest data is older than requested range - will show high downtime`);
-      }
+    // Validate time range
+    if (actualTotalTimeSeconds <= 0) {
+      console.error(`[Downtime API] Invalid time range: start (${actualStartTimeStr}) is after end (${actualEndTimeStr})`);
+      return NextResponse.json({
+        data: {
+          downtimePercentage: 100,
+          uptimePercentage: 0,
+          totalDowntime: 0,
+          totalUptime: 0,
+          incidentCount: 0,
+          periods: [],
+        },
+      });
     }
-
+    
+    console.log(`[Downtime API] Using adjusted time range (matching vibration API logic):`);
+    if (latestTime) {
+      console.log(`[Downtime API] Latest data found: ${latestTime.toISOString()}`);
+      console.log(`[Downtime API] Using latest data as end time (matching vibration chart)`);
+    } else {
+      console.log(`[Downtime API] No latest data found, using NOW as end time`);
+    }
     console.log(`[Downtime API] Adjusted time range: ${actualStartTimeStr} to ${actualEndTimeStr}`);
     console.log(`[Downtime API] Adjusted total seconds: ${actualTotalTimeSeconds.toFixed(0)} (${(actualTotalTimeSeconds/3600).toFixed(2)} hours)`);
 
@@ -298,6 +333,139 @@ export async function GET(request: NextRequest) {
     console.log(`  Uptime %: ${uptimePercentage.toFixed(2)}%`);
     console.log(`  Incidents: ${periods.length}`);
 
+    // Calculate comparison with previous period
+    let comparison: DowntimeStats['comparison'] | undefined;
+    
+    // Calculate previous period time range
+    const previousEndTime = actualStartTime; // End of previous period = start of current period
+    const previousStartTime = new Date(previousEndTime.getTime() - actualTotalTimeSeconds * 1000);
+    const previousStartTimeStr = previousStartTime.toISOString();
+    const previousEndTimeStr = previousEndTime.toISOString();
+    
+    console.log(`[Downtime API] Calculating comparison for previous period: ${previousStartTimeStr} to ${previousEndTimeStr}`);
+    console.log(`[Downtime API] Using machineId: ${machineId} for comparison query`);
+    
+    // Query previous period data
+    const previousFluxQuery = `
+      from(bucket: "${VIBRATION_BUCKET}")
+        |> range(start: ${previousStartTimeStr}, stop: ${previousEndTimeStr})
+        |> filter(fn: (r) => r["_measurement"] == "Vibration")
+        |> filter(fn: (r) => exists r.machineId and r.machineId == "${machineId}")
+        |> filter(fn: (r) => r["_field"] == "vibration" or r["_field"] == "x_vibration" or r["_field"] == "y_vibration")
+        |> keep(columns: ["_time"])
+        |> group()
+        |> distinct(column: "_time")
+        |> sort(columns: ["_time"])
+    `;
+
+    console.log(`[Downtime API] Previous period query: ${previousFluxQuery.substring(0, 200)}...`);
+
+    const previousResults: any[] = [];
+    
+    await new Promise<void>((resolve) => {
+      queryApi.queryRows(previousFluxQuery, {
+        next(row, tableMeta) {
+          const record = tableMeta.toObject(row);
+          previousResults.push(record);
+        },
+        error(error) {
+          console.error('[Downtime API] Error querying previous period:', error);
+          console.error('[Downtime API] Error details:', error.message);
+          resolve();
+        },
+        complete() {
+          console.log(`[Downtime API] Found ${previousResults.length} data points in previous period for machineId: ${machineId}`);
+          if (previousResults.length === 0) {
+            console.log(`[Downtime API] ⚠️  No data found in previous period - comparison will not be available`);
+            console.log(`[Downtime API] This could mean:`);
+            console.log(`  1. Machine had no data in previous period`);
+            console.log(`  2. MachineId format mismatch: "${machineId}"`);
+            console.log(`  3. Data exists but query isn't matching`);
+          }
+          resolve();
+        },
+      });
+    });
+
+    // Calculate downtime for previous period
+    let previousDowntimePercentage: number = 0;
+    
+    if (previousResults.length > 0) {
+      // Extract timestamps from previous period
+      const previousTimestampSet = new Set<number>();
+      previousResults.forEach(r => {
+        const timeStr = r._time || r._value || (r as any).time;
+        if (timeStr) {
+          try {
+            const timestamp = typeof timeStr === 'string' ? new Date(timeStr).getTime() : timeStr;
+            if (!isNaN(timestamp)) {
+              previousTimestampSet.add(timestamp);
+            }
+          } catch (e) {
+            // Skip invalid timestamps
+          }
+        }
+      });
+      
+      const previousDataPoints = Array.from(previousTimestampSet).sort((a, b) => a - b);
+      
+      // Calculate downtime for previous period
+      let previousTotalDowntime = 0;
+      const previousStartTimeMs = previousStartTime.getTime();
+      const previousEndTimeMs = previousEndTime.getTime();
+      
+      // Initial gap
+      if (previousDataPoints.length > 0) {
+        const firstDataTime = previousDataPoints[0];
+        if (firstDataTime - previousStartTimeMs > gapThreshold) {
+          previousTotalDowntime += (firstDataTime - previousStartTimeMs) / 1000;
+        }
+      }
+      
+      // Gaps between data points
+      for (let i = 0; i < previousDataPoints.length - 1; i++) {
+        const gap = previousDataPoints[i + 1] - previousDataPoints[i];
+        if (gap > gapThreshold) {
+          previousTotalDowntime += gap / 1000;
+        }
+      }
+      
+      // Final gap
+      if (previousDataPoints.length > 0) {
+        const lastDataPointTime = previousDataPoints[previousDataPoints.length - 1];
+        const timeSinceLastData = previousEndTimeMs - lastDataPointTime;
+        if (timeSinceLastData > gapThreshold) {
+          previousTotalDowntime += timeSinceLastData / 1000;
+        }
+      }
+      
+      previousDowntimePercentage = actualTotalTimeSeconds > 0 
+        ? (previousTotalDowntime / actualTotalTimeSeconds) * 100 
+        : 0;
+    } else {
+      // No data in previous period = 100% downtime
+      previousDowntimePercentage = 100;
+      console.log(`[Downtime API] ⚠️  No data found in previous period - assuming 100% downtime`);
+      console.log(`[Downtime API] MachineId used: ${machineId}`);
+      console.log(`[Downtime API] Previous period: ${previousStartTimeStr} to ${previousEndTimeStr}`);
+    }
+    
+    // Always calculate comparison (even if previous period had no data)
+    const change = downtimePercentage - previousDowntimePercentage;
+    const trend = Math.abs(change) < 0.1 ? 'same' : (change > 0 ? 'increasing' : 'decreasing');
+    
+    comparison = {
+      previousDowntimePercentage: Math.max(0, Math.min(100, previousDowntimePercentage)),
+      change: Math.abs(change),
+      trend,
+    };
+    
+    console.log(`[Downtime API] Comparison calculated:`);
+    console.log(`  Previous period downtime: ${previousDowntimePercentage.toFixed(2)}%`);
+    console.log(`  Current period downtime: ${downtimePercentage.toFixed(2)}%`);
+    console.log(`  Change: ${change > 0 ? '+' : ''}${change.toFixed(2)}%`);
+    console.log(`  Trend: ${trend}`);
+
     const stats: DowntimeStats = {
       downtimePercentage: Math.max(0, Math.min(100, downtimePercentage)),
       uptimePercentage: Math.max(0, Math.min(100, uptimePercentage)),
@@ -305,13 +473,19 @@ export async function GET(request: NextRequest) {
       totalUptime,
       incidentCount: periods.length,
       periods: periods.slice(0, 10), // Limit to last 10 periods
+      comparison,
     };
 
     return NextResponse.json({ data: stats });
   } catch (error: any) {
     console.error('[Downtime API] Error:', error);
+    console.error('[Downtime API] Error stack:', error.stack);
+    console.error('[Downtime API] Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
     return NextResponse.json(
-      { error: error.message || 'Failed to calculate downtime' },
+      { 
+        error: error.message || 'Failed to calculate downtime',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     );
   }
