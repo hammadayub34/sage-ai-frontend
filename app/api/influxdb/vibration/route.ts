@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { InfluxDB, QueryApi } from '@influxdata/influxdb-client';
 
-const INFLUXDB_URL = process.env.NEXT_PUBLIC_INFLUXDB_URL || process.env.INFLUXDB_URL || 'http://localhost:8086';
-const INFLUXDB_TOKEN = process.env.NEXT_PUBLIC_INFLUXDB_TOKEN || process.env.INFLUXDB_TOKEN || 'my-super-secret-auth-token';
-const INFLUXDB_ORG = process.env.NEXT_PUBLIC_INFLUXDB_ORG || process.env.INFLUXDB_ORG || 'myorg';
-const CNC_BUCKET = 'cnc_machine_data';
+const INFLUXDB_URL = process.env.NEXT_PUBLIC_INFLUXDB_URL || process.env.INFLUXDB_URL || 'https://influxtest.wisermachines.com';
+const INFLUXDB_TOKEN = process.env.NEXT_PUBLIC_INFLUXDB_TOKEN || process.env.INFLUXDB_TOKEN || '1MrRJ8q-zSnlt9HRZMeY5YNhOQZWbi6Xk-oU6pFFTSbJRv4V32cTJutWMJota0r6t_F6N5zXOfE6IXHYmcUk4Q==';
+const INFLUXDB_ORG = process.env.NEXT_PUBLIC_INFLUXDB_ORG || process.env.INFLUXDB_ORG || 'wisermachines';
+const VIBRATION_BUCKET = process.env.INFLUXDB_BUCKET || 'wisermachines-test';
 
 const influxDB = new InfluxDB({
   url: INFLUXDB_URL,
@@ -16,40 +16,33 @@ const queryApi: QueryApi = influxDB.getQueryApi(INFLUXDB_ORG);
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const machineId = searchParams.get('machineId') || 'lathe01';
-    // Use a longer time range since the data is from March 2024
-    const timeRange = searchParams.get('timeRange') || '-24h';
-    const windowPeriod = searchParams.get('windowPeriod') || '5s'; // Use 5-second intervals to match raw data
+    const machineId = searchParams.get('machineId') || '';
+    const timeRange = searchParams.get('timeRange') || '-7d'; // Default to 7 days to catch older data
+    const windowPeriod = searchParams.get('windowPeriod') || '5m';
+    const axis = searchParams.get('axis') || 'vibration'; // 'vibration', 'x_vibration', 'y_vibration', 'x_acc', 'y_acc', 'z_acc'
 
-    // Map machineId (lathe01, lathe02, etc.) to the UUID format used in the CSV
-    // The CSV has machine_id as UUID: 09ce4fec-8de8-4c1e-a987-9a0080313456
-    // This maps to lathe01
-    const machineIdMap: Record<string, string> = {
-      'lathe01': '09ce4fec-8de8-4c1e-a987-9a0080313456',
-      'lathe02': '09ce4fec-8de8-4c1e-a987-9a0080313456', // Update with actual UUID if different
-      'lathe03': '09ce4fec-8de8-4c1e-a987-9a0080313456', // Update with actual UUID if different
-    };
+    if (!machineId) {
+      return NextResponse.json(
+        { error: 'machineId is required', data: [] },
+        { status: 400 }
+      );
+    }
 
-    // Get the mapped UUID, fallback to the provided machineId if not in map
-    const mappedMachineId = machineIdMap[machineId] || machineId;
-    
-    // First, find the latest data point to use as the "end" time
-    // Then calculate start time by going back the requested time range
+    // First, find the latest data point for this machine to determine actual data range
     const findLatestQuery = `
-      from(bucket: "${CNC_BUCKET}")
+      from(bucket: "${VIBRATION_BUCKET}")
         |> range(start: -365d)
-        |> filter(fn: (r) => r["_measurement"] == "sensor_data")
-        |> filter(fn: (r) => r["sensor_type"] == "vibration")
-        |> filter(fn: (r) => r["machine_id"] == "${mappedMachineId}")
-        |> filter(fn: (r) => r["_field"] == "value")
+        |> filter(fn: (r) => r["_measurement"] == "Vibration")
+        |> filter(fn: (r) => exists r.machineId and r.machineId == "${machineId}")
+        |> filter(fn: (r) => r["_field"] == "${axis}")
         |> sort(columns: ["_time"], desc: true)
         |> limit(n: 1)
     `;
 
-    // Get the latest timestamp first
     let latestTime: Date | null = null;
     const latestResults: any[] = [];
-    
+
+    // Find latest data point
     await new Promise<void>((resolve) => {
       queryApi.queryRows(findLatestQuery, {
         next(row, tableMeta) {
@@ -57,7 +50,7 @@ export async function GET(request: NextRequest) {
           latestResults.push(record);
         },
         error(error) {
-          console.error('[Vibration API] Error finding latest time:', error);
+          console.warn('[Vibration API] Error finding latest time:', error.message);
           resolve();
         },
         complete() {
@@ -69,56 +62,58 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // If no data found, use a default range
-    if (!latestTime) {
-      latestTime = new Date('2024-03-04T07:29:50Z'); // Latest time from CSV
-    }
-
-    // Calculate start time based on timeRange parameter
-    const stopTime = latestTime.toISOString();
-    let startTime: Date = new Date(latestTime);
-    
-    // Parse timeRange (e.g., "-24h", "-7d", "-365d")
+    // Parse timeRange (e.g., "-24h", "-7d", "-1m")
+    let startTime: Date = new Date();
     if (timeRange.startsWith('-')) {
-      const timeRangeStr = timeRange.slice(1); // Remove the minus sign
-      const unit = timeRangeStr.slice(-1); // Get last character (h, d, m, etc.)
-      const value = parseInt(timeRangeStr.slice(0, -1)); // Get the number
+      const timeRangeStr = timeRange.slice(1);
+      const unit = timeRangeStr.slice(-1);
+      const value = parseInt(timeRangeStr.slice(0, -1));
       
       switch (unit) {
-        case 'h': // hours
+        case 'h':
           startTime.setHours(startTime.getHours() - value);
           break;
-        case 'd': // days
+        case 'd':
           startTime.setDate(startTime.getDate() - value);
           break;
-        case 'm': // minutes
+        case 'm':
           startTime.setMinutes(startTime.getMinutes() - value);
           break;
-        case 's': // seconds
+        case 's':
           startTime.setSeconds(startTime.getSeconds() - value);
           break;
         default:
-          // Default to 24 hours if format is unknown
-          startTime.setHours(startTime.getHours() - 24);
+          startTime.setDate(startTime.getDate() - 7); // Default to 7 days
       }
-    } else {
-      // If not a relative range, try to parse as absolute date
-      startTime = new Date(timeRange);
+    }
+
+    // If we found latest data and it's older than our time range, extend the range
+    if (latestTime) {
+      const timeDiff = startTime.getTime() - latestTime.getTime();
+      if (timeDiff > 0) {
+        // Latest data is older than requested range, extend to include it
+        console.log(`[Vibration API] Latest data is ${Math.round(timeDiff / (1000 * 60 * 60))} hours older than requested range. Extending range.`);
+        startTime = new Date(latestTime.getTime() - (24 * 60 * 60 * 1000)); // Go back 1 day from latest data
+      }
     }
     
     const startTimeStr = startTime.toISOString();
+    const stopTime = latestTime ? latestTime.toISOString() : new Date().toISOString();
     
-    console.log(`[Vibration API] Querying for machineId: ${machineId} -> mapped to: ${mappedMachineId}`);
-    console.log(`[Vibration API] Latest data point: ${stopTime}`);
+    console.log(`[Vibration API] Querying for machineId: ${machineId}`);
+    console.log(`[Vibration API] Axis: ${axis}`);
     console.log(`[Vibration API] Time range: ${startTimeStr} to ${stopTime}`);
+    if (latestTime) {
+      console.log(`[Vibration API] Latest data found: ${latestTime.toISOString()}`);
+    }
     
+    // Query the wisermachines-test bucket with Vibration measurement
     const fluxQuery = `
-      from(bucket: "${CNC_BUCKET}")
+      from(bucket: "${VIBRATION_BUCKET}")
         |> range(start: ${startTimeStr}, stop: ${stopTime})
-        |> filter(fn: (r) => r["_measurement"] == "sensor_data")
-        |> filter(fn: (r) => r["sensor_type"] == "vibration")
-        |> filter(fn: (r) => r["machine_id"] == "${mappedMachineId}")
-        |> filter(fn: (r) => r["_field"] == "value")
+        |> filter(fn: (r) => r["_measurement"] == "Vibration")
+        |> filter(fn: (r) => exists r.machineId and r.machineId == "${machineId}")
+        |> filter(fn: (r) => r["_field"] == "${axis}")
         |> aggregateWindow(every: ${windowPeriod}, fn: mean, createEmpty: false)
         |> sort(columns: ["_time"])
         |> limit(n: 10000)
@@ -150,8 +145,13 @@ export async function GET(request: NextRequest) {
             value: record._value as number,
           }));
 
-          console.log(`[Vibration API] Returning ${data.length} data points`);
-          resolve(NextResponse.json({ data }));
+          console.log(`[Vibration API] Returning ${data.length} data points for axis: ${axis}`);
+          resolve(NextResponse.json({ 
+            data, 
+            axis,
+            latestDataTime: latestTime ? latestTime.toISOString() : null,
+            timeRange: { start: startTimeStr, stop: stopTime }
+          }));
         },
       });
     });

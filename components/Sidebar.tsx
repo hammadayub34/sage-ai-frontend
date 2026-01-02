@@ -1,11 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { DashboardIcon, ChatIcon, CalendarIcon, AlarmEventsIcon, WorkflowIcon, ShopfloorsIcon } from './Icons';
+import { usePathname, useRouter } from 'next/navigation';
+import { DashboardIcon, ChatIcon, CalendarIcon, AlarmEventsIcon, WorkflowIcon, ShopfloorsIcon, SignOutIcon } from './Icons';
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSignOut = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('isLoggedIn');
+      localStorage.removeItem('user');
+      router.push('/login');
+    }
+  };
 
   const navItems = [
     {
@@ -69,6 +78,17 @@ export function Sidebar() {
           })}
         </ul>
       </nav>
+      
+      {/* Sign Out Button - Bottom Corner */}
+      <div className="p-4 border-t border-dark-border">
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center justify-center px-4 py-3 rounded-lg transition-colors text-gray-400 hover:bg-dark-border hover:text-white"
+          title="Sign Out"
+        >
+          <SignOutIcon className="w-6 h-6" />
+        </button>
+      </div>
     </div>
   );
 }

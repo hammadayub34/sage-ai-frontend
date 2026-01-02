@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 
@@ -10,6 +10,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+
+  // Check if user is already logged in, redirect to dashboard
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = localStorage.getItem('isLoggedIn');
+      const user = localStorage.getItem('user');
+      
+      if (isLoggedIn && user) {
+        // User already logged in, redirect to dashboard
+        router.push('/');
+      }
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,8 +49,22 @@ export default function LoginPage() {
         
         toast.success('Login successful!');
         
-        // Redirect to dashboard
-        router.push('/');
+        // Redirect to dashboard with fallback
+        try {
+          router.push('/');
+          // Fallback: if router.push doesn't work, use window.location after a short delay
+          setTimeout(() => {
+            if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+              console.log('[Login] Router.push failed, using window.location fallback');
+              window.location.href = '/';
+            }
+          }, 500);
+        } catch (redirectError) {
+          console.error('[Login] Redirect error:', redirectError);
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+        }
       } else {
         setError(data.error || 'Login failed. Please try again.');
         toast.error(data.error || 'Login failed. Please try again.');

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { InfluxDB, QueryApi } from '@influxdata/influxdb-client';
 
-// Use NEXT_PUBLIC_ vars if available, otherwise fallback to defaults
-const INFLUXDB_URL = process.env.NEXT_PUBLIC_INFLUXDB_URL || process.env.INFLUXDB_URL || 'http://localhost:8086';
-const INFLUXDB_TOKEN = process.env.NEXT_PUBLIC_INFLUXDB_TOKEN || process.env.INFLUXDB_TOKEN || 'my-super-secret-auth-token';
-const INFLUXDB_ORG = process.env.NEXT_PUBLIC_INFLUXDB_ORG || process.env.INFLUXDB_ORG || 'myorg';
-const INFLUXDB_BUCKET = process.env.NEXT_PUBLIC_INFLUXDB_BUCKET || process.env.INFLUXDB_BUCKET || 'plc_data_new';
+const INFLUXDB_URL = process.env.NEXT_PUBLIC_INFLUXDB_URL || process.env.INFLUXDB_URL || 'https://influxtest.wisermachines.com';
+const INFLUXDB_TOKEN = process.env.NEXT_PUBLIC_INFLUXDB_TOKEN || process.env.INFLUXDB_TOKEN || '1MrRJ8q-zSnlt9HRZMeY5YNhOQZWbi6Xk-oU6pFFTSbJRv4V32cTJutWMJota0r6t_F6N5zXOfE6IXHYmcUk4Q==';
+const INFLUXDB_ORG = process.env.NEXT_PUBLIC_INFLUXDB_ORG || process.env.INFLUXDB_ORG || 'wisermachines';
+const VIBRATION_BUCKET = process.env.INFLUXDB_BUCKET || 'wisermachines-test';
 
 const influxDB = new InfluxDB({
   url: INFLUXDB_URL,
@@ -21,58 +20,138 @@ interface DowntimePeriod {
 }
 
 interface DowntimeStats {
-  totalDowntime: number;
-  totalDowntimeFormatted: string;
-  incidentCount: number;
-  averageDowntime: number;
-  averageDowntimeFormatted: string;
-  periods: DowntimePeriod[];
+  downtimePercentage: number;
   uptimePercentage: number;
+  totalDowntime: number;
+  totalUptime: number;
+  incidentCount: number;
+  periods: DowntimePeriod[];
 }
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const machineId = searchParams.get('machineId') || 'machine-01';
-    const timeRange = searchParams.get('timeRange') || '-24h';
-    const machineType = searchParams.get('machineType');
+    const machineId = searchParams.get('machineId') || '';
+    const timeRange = searchParams.get('timeRange') || '-7d';
 
-    const machineTypeFilter = machineType 
-      ? `|> filter(fn: (r) => r["machine_type"] == "${machineType}")`
-      : '';
-
-    // Determine which fields to use for downtime detection
-    // For bottle filler: Use AlarmLowProductLevel (stops production, actually changes)
-    // For lathe: Use Fault field (which does change) and critical alarms
-    let downtimeFields: string[];
-    if (machineType === 'lathe') {
-      // Lathe: Fault field changes, and critical alarms that stop production
-      downtimeFields = ['Fault', 'AlarmChuckNotClamped', 'AlarmDoorOpen'];
-    } else {
-      // Bottle filler: Use AlarmLowProductLevel (critical alarm that stops production and actually changes)
-      // Note: AlarmFault is always False (derived from static Fault field), so we use AlarmLowProductLevel
-      downtimeFields = ['AlarmLowProductLevel'];
+    if (!machineId) {
+      return NextResponse.json(
+        { error: 'machineId is required' },
+        { status: 400 }
+      );
     }
 
-    const fieldFilter = downtimeFields.map(f => `r["_field"] == "${f}"`).join(' or ');
+    // Parse timeRange to get start time
+    let startTime: Date = new Date();
+    if (timeRange.startsWith('-')) {
+      const timeRangeStr = timeRange.slice(1);
+      const unit = timeRangeStr.slice(-1);
+      const value = parseInt(timeRangeStr.slice(0, -1));
+      
+      switch (unit) {
+        case 'h':
+          startTime.setHours(startTime.getHours() - value);
+          break;
+        case 'd':
+          startTime.setDate(startTime.getDate() - value);
+          break;
+        case 'm':
+          startTime.setMinutes(startTime.getMinutes() - value);
+          break;
+        case 's':
+          startTime.setSeconds(startTime.getSeconds() - value);
+          break;
+        default:
+          startTime.setDate(startTime.getDate() - 7);
+      }
+    }
+    
+    const startTimeStr = startTime.toISOString();
+    const endTime = new Date();
+    const totalTimeSeconds = (endTime.getTime() - startTime.getTime()) / 1000;
+    
+    console.log(`[Downtime API] Time Range Calculation:`);
+    console.log(`  Input: ${timeRange}`);
+    console.log(`  Start: ${startTimeStr}`);
+    console.log(`  End: ${endTime.toISOString()}`);
+    console.log(`  Total seconds: ${totalTimeSeconds.toFixed(0)} (${(totalTimeSeconds/3600).toFixed(2)} hours)`);
+    console.log(`[Downtime API] Querying for machineId: ${machineId}`);
 
-    // Query fields that indicate downtime
-    const fluxQuery = `
-      from(bucket: "${INFLUXDB_BUCKET}")
-        |> range(start: ${timeRange})
-        |> filter(fn: (r) => r["machine_id"] == "${machineId}")
-        ${machineTypeFilter}
-        |> filter(fn: (r) => ${fieldFilter})
-        |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-        |> sort(columns: ["_time"])
-        |> map(fn: (r) => ({
-            r with
-            isDown: ${machineType === 'lathe' 
-              ? `if exists r.Fault then (if r.Fault == true then 1 else 0) else if exists r.AlarmChuckNotClamped then (if r.AlarmChuckNotClamped == true then 1 else 0) else if exists r.AlarmDoorOpen then (if r.AlarmDoorOpen == true then 1 else 0) else 0`
-              : `if exists r.AlarmLowProductLevel then (if r.AlarmLowProductLevel == true then 1 else 0) else 0`
-            }
-          }))
+    // Query vibration data to find gaps (downtime = no data)
+    // First, find the latest data point to ensure we're querying the right range
+    const findLatestQuery = `
+      from(bucket: "${VIBRATION_BUCKET}")
+        |> range(start: -365d)
+        |> filter(fn: (r) => r["_measurement"] == "Vibration")
+        |> filter(fn: (r) => exists r.machineId and r.machineId == "${machineId}")
+        |> filter(fn: (r) => r["_field"] == "vibration" or r["_field"] == "x_vibration" or r["_field"] == "y_vibration")
+        |> sort(columns: ["_time"], desc: true)
+        |> limit(n: 1)
     `;
+
+    let latestTime: Date | null = null;
+    const latestResults: any[] = [];
+
+    // Find latest data point
+    await new Promise<void>((resolve) => {
+      queryApi.queryRows(findLatestQuery, {
+        next(row, tableMeta) {
+          const record = tableMeta.toObject(row);
+          latestResults.push(record);
+        },
+        error(error) {
+          console.warn('[Downtime API] Error finding latest time:', error.message);
+          resolve();
+        },
+        complete() {
+          if (latestResults.length > 0) {
+            latestTime = new Date(latestResults[0]._time as string);
+            console.log(`[Downtime API] Latest data point found: ${latestTime.toISOString()}`);
+          } else {
+            console.log(`[Downtime API] No latest data point found`);
+          }
+          resolve();
+        },
+      });
+    });
+
+    // For downtime calculation, we want to calculate for the REQUESTED time range (from NOW backwards)
+    // NOT from the latest data point. This ensures we're calculating downtime for the actual time period requested.
+    // If data is older than the range, we still calculate for the requested range, but may find no data.
+    
+    const actualStartTime = startTime; // Use the requested start time (e.g., 24h ago from NOW)
+    const actualEndTime = endTime; // Always use NOW as the end time
+    const actualStartTimeStr = actualStartTime.toISOString();
+    const actualEndTimeStr = actualEndTime.toISOString();
+    const actualTotalTimeSeconds = (actualEndTime.getTime() - actualStartTime.getTime()) / 1000;
+    
+    console.log(`[Downtime API] Using REQUESTED time range (not latest data point):`);
+    if (latestTime) {
+      const timeDiff = endTime.getTime() - latestTime.getTime();
+      console.log(`[Downtime API] Latest data is ${Math.round(timeDiff / (1000 * 60 * 60))} hours old`);
+      if (timeDiff > actualTotalTimeSeconds) {
+        console.log(`[Downtime API] ⚠️  Latest data is older than requested range - will show high downtime`);
+      }
+    }
+
+    console.log(`[Downtime API] Adjusted time range: ${actualStartTimeStr} to ${actualEndTimeStr}`);
+    console.log(`[Downtime API] Adjusted total seconds: ${actualTotalTimeSeconds.toFixed(0)} (${(actualTotalTimeSeconds/3600).toFixed(2)} hours)`);
+
+    // Query vibration data - get all timestamps where data exists
+    // Query each field separately and combine timestamps
+    const fluxQuery = `
+      from(bucket: "${VIBRATION_BUCKET}")
+        |> range(start: ${actualStartTimeStr}, stop: ${actualEndTimeStr})
+        |> filter(fn: (r) => r["_measurement"] == "Vibration")
+        |> filter(fn: (r) => exists r.machineId and r.machineId == "${machineId}")
+        |> filter(fn: (r) => r["_field"] == "vibration" or r["_field"] == "x_vibration" or r["_field"] == "y_vibration")
+        |> keep(columns: ["_time"])
+        |> group()
+        |> distinct(column: "_time")
+        |> sort(columns: ["_time"])
+    `;
+
+    console.log(`[Downtime API] Flux query: ${fluxQuery.substring(0, 200)}...`);
 
     const results: any[] = [];
 
@@ -83,114 +162,157 @@ export async function GET(request: NextRequest) {
           results.push(record);
         },
         error(error) {
-          console.error('InfluxDB query error:', error);
+          console.error('[Downtime API] InfluxDB query error:', error);
           reject(error);
         },
         complete() {
+          console.log(`[Downtime API] Found ${results.length} data points`);
           resolve();
         },
       });
     });
 
-    // Process results to find downtime periods
-    const periods: DowntimePeriod[] = [];
-    let currentPeriodStart: string | null = null;
-    let prevIsDown = false;
-    let totalDowntime = 0;
-    
-    // Get the time range to calculate total time
-    const rangeMatch = timeRange.match(/-(\d+)([hdms])/);
-    let totalTimeSeconds = 24 * 3600; // default 24h
-    if (rangeMatch) {
-      const value = parseInt(rangeMatch[1]);
-      const unit = rangeMatch[2];
-      if (unit === 'h') totalTimeSeconds = value * 3600;
-      else if (unit === 'd') totalTimeSeconds = value * 24 * 3600;
-      else if (unit === 'm') totalTimeSeconds = value * 60;
-      else if (unit === 's') totalTimeSeconds = value;
+    // If no data at all, machine is 100% down
+    if (results.length === 0) {
+      console.log(`[Downtime API] ⚠️  No vibration data found for machineId: ${machineId}`);
+      console.log(`[Downtime API] This could mean:`);
+      console.log(`  1. Machine has no data in the selected time range`);
+      console.log(`  2. MachineId format doesn't match InfluxDB`);
+      console.log(`  3. Data exists but query isn't finding it`);
+      console.log(`[Downtime API] Returning 100% downtime for ${actualTotalTimeSeconds.toFixed(0)}s period`);
+      
+      return NextResponse.json({
+        data: {
+          downtimePercentage: 100,
+          uptimePercentage: 0,
+          totalDowntime: actualTotalTimeSeconds,
+          totalUptime: 0,
+          incidentCount: 1,
+          periods: [{
+            startTime: actualStartTimeStr,
+            endTime: null,
+            duration: actualTotalTimeSeconds,
+          }],
+        },
+      });
     }
+
+    // Find gaps in data (downtime periods)
+    const periods: DowntimePeriod[] = [];
     
-    for (const record of results) {
-      const time = record._time as string;
-      const isDown = (record.isDown as number) === 1;
-      
-      // Detect transition from up to down
-      if (!prevIsDown && isDown) {
-        currentPeriodStart = time;
+    // Extract unique timestamps from results
+    const timestampSet = new Set<number>();
+    results.forEach(r => {
+      // Try different possible field names for timestamp
+      const timeStr = r._time || r._value || (r as any).time;
+      if (timeStr) {
+        try {
+          const timestamp = typeof timeStr === 'string' ? new Date(timeStr).getTime() : timeStr;
+          if (!isNaN(timestamp)) {
+            timestampSet.add(timestamp);
+          }
+        } catch (e) {
+          // Skip invalid timestamps
+        }
       }
-      
-      // Detect transition from down to up
-      if (prevIsDown && !isDown && currentPeriodStart) {
-        const startTime = new Date(currentPeriodStart).getTime();
-        const endTime = new Date(time).getTime();
-        const duration = (endTime - startTime) / 1000; // seconds
-        
+    });
+    
+    const dataPoints = Array.from(timestampSet).sort((a, b) => a - b);
+    
+    console.log(`[Downtime API] Extracted ${dataPoints.length} unique timestamps from ${results.length} results`);
+
+    console.log(`[Downtime API] Processing ${dataPoints.length} data points`);
+    console.log(`[Downtime API] First data point: ${new Date(dataPoints[0]).toISOString()}`);
+    console.log(`[Downtime API] Last data point: ${new Date(dataPoints[dataPoints.length - 1]).toISOString()}`);
+
+    // Expected interval between data points - vibration data typically comes every minute or so
+    // Consider it downtime if gap > 5 minutes (more lenient threshold)
+    const gapThreshold = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+    let totalDowntime = 0;
+    const startTimeMs = actualStartTime.getTime();
+    const endTimeMs = actualEndTime.getTime();
+
+    // Check for initial gap (from start to first data point)
+    if (dataPoints.length > 0) {
+      const firstDataTime = dataPoints[0];
+      if (firstDataTime - startTimeMs > gapThreshold) {
+        const duration = (firstDataTime - startTimeMs) / 1000;
         periods.push({
-          startTime: currentPeriodStart,
-          endTime: time,
+          startTime: new Date(startTimeMs).toISOString(),
+          endTime: new Date(firstDataTime).toISOString(),
           duration,
         });
-        
         totalDowntime += duration;
-        currentPeriodStart = null;
+        console.log(`[Downtime API] Initial gap: ${duration.toFixed(0)}s`);
       }
-      
-      prevIsDown = isDown;
     }
-    
-    // Handle case where machine is still down at the end
-    if (currentPeriodStart) {
-      const startTime = new Date(currentPeriodStart).getTime();
-      const endTime = Date.now();
-      const duration = (endTime - startTime) / 1000; // seconds
-      
-      periods.push({
-        startTime: currentPeriodStart,
-        endTime: null,
-        duration,
-      });
-      
-      totalDowntime += duration;
-    }
-    
-    const incidentCount = periods.length;
-    const averageDowntime = incidentCount > 0 ? totalDowntime / incidentCount : 0;
-    const uptimePercentage = totalTimeSeconds > 0 
-      ? ((totalTimeSeconds - totalDowntime) / totalTimeSeconds) * 100 
-      : 100;
-    
-    // Format duration helper
-    const formatDuration = (seconds: number): string => {
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const secs = Math.floor(seconds % 60);
-      
-      if (hours > 0) {
-        return `${hours}h ${minutes}m ${secs}s`;
-      } else if (minutes > 0) {
-        return `${minutes}m ${secs}s`;
-      } else {
-        return `${secs}s`;
+
+    // Find gaps between data points
+    for (let i = 0; i < dataPoints.length - 1; i++) {
+      const currentTime = dataPoints[i];
+      const nextTime = dataPoints[i + 1];
+      const gap = nextTime - currentTime;
+
+      if (gap > gapThreshold) {
+        const duration = gap / 1000;
+        periods.push({
+          startTime: new Date(currentTime).toISOString(),
+          endTime: new Date(nextTime).toISOString(),
+          duration,
+        });
+        totalDowntime += duration;
+        console.log(`[Downtime API] Gap found: ${duration.toFixed(0)}s between ${new Date(currentTime).toISOString()} and ${new Date(nextTime).toISOString()}`);
       }
-    };
-    
+    }
+
+    // Check for final gap (from last data point to now)
+    if (dataPoints.length > 0) {
+      const lastDataPointTime = dataPoints[dataPoints.length - 1];
+      const timeSinceLastData = endTimeMs - lastDataPointTime;
+      if (timeSinceLastData > gapThreshold) {
+        const duration = timeSinceLastData / 1000;
+        periods.push({
+          startTime: new Date(lastDataPointTime).toISOString(),
+          endTime: null,
+          duration,
+        });
+        totalDowntime += duration;
+        console.log(`[Downtime API] Final gap: ${duration.toFixed(0)}s since last data`);
+      }
+    }
+
+    console.log(`[Downtime API] Total downtime: ${totalDowntime.toFixed(0)}s out of ${actualTotalTimeSeconds.toFixed(0)}s`);
+
+    // Calculate uptime: time periods where data exists
+    // Uptime = total time - downtime
+    const totalUptime = actualTotalTimeSeconds - totalDowntime;
+    const downtimePercentage = actualTotalTimeSeconds > 0 ? (totalDowntime / actualTotalTimeSeconds) * 100 : 0;
+    const uptimePercentage = actualTotalTimeSeconds > 0 ? (totalUptime / actualTotalTimeSeconds) * 100 : 100;
+
+    console.log(`[Downtime API] Calculation Summary:`);
+    console.log(`  Total time period: ${actualTotalTimeSeconds.toFixed(0)}s (${(actualTotalTimeSeconds/3600).toFixed(1)} hours)`);
+    console.log(`  Total downtime: ${totalDowntime.toFixed(0)}s (${(totalDowntime/3600).toFixed(1)} hours)`);
+    console.log(`  Total uptime: ${totalUptime.toFixed(0)}s (${(totalUptime/3600).toFixed(1)} hours)`);
+    console.log(`  Downtime %: ${downtimePercentage.toFixed(2)}%`);
+    console.log(`  Uptime %: ${uptimePercentage.toFixed(2)}%`);
+    console.log(`  Incidents: ${periods.length}`);
+
     const stats: DowntimeStats = {
-      totalDowntime,
-      totalDowntimeFormatted: formatDuration(totalDowntime),
-      incidentCount,
-      averageDowntime,
-      averageDowntimeFormatted: formatDuration(averageDowntime),
-      periods: periods.slice(0, 10), // Limit to last 10 periods
+      downtimePercentage: Math.max(0, Math.min(100, downtimePercentage)),
       uptimePercentage: Math.max(0, Math.min(100, uptimePercentage)),
+      totalDowntime,
+      totalUptime,
+      incidentCount: periods.length,
+      periods: periods.slice(0, 10), // Limit to last 10 periods
     };
 
     return NextResponse.json({ data: stats });
   } catch (error: any) {
-    console.error('Downtime API error:', error);
+    console.error('[Downtime API] Error:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to calculate downtime' },
       { status: 500 }
     );
   }
 }
-

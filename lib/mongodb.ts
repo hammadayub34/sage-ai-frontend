@@ -84,17 +84,92 @@ export async function getMachinesByStatus(status: 'active' | 'inactive'): Promis
 }
 
 /**
- * Get machines by lab ID
+ * Get machines by lab ID with connections/nodes
  */
-export async function getMachinesByLabId(labId: string): Promise<Machine[]> {
+export async function getMachinesByLabId(labId: string): Promise<(Machine & { nodes: any[] })[]> {
   const db = await connectToDatabase();
-  const collection = db.collection<Machine>('machines');
+  const machinesCollection = db.collection<Machine>('machines');
+  const connectionsCollection = db.collection('connections');
   
-  const machines = await collection.find({ labId }).toArray();
-  return machines.map(machine => ({
-    ...machine,
-    _id: machine._id.toString(),
-  }));
+  // Find machines for this lab (try both string and ObjectId formats)
+  const { ObjectId } = await import('mongodb');
+  let labObjectId: any;
+  try {
+    labObjectId = new ObjectId(labId);
+  } catch {
+    labObjectId = null;
+  }
+  
+  const machines = await machinesCollection.find({
+    $or: [
+      { labId: labId },
+      ...(labObjectId ? [{ labId: labObjectId }] : [])
+    ]
+  }).toArray();
+  
+  // Get all machine IDs (both string and ObjectId formats)
+  const machineIds = machines.map(m => m._id.toString());
+  const machineObjectIds = machines.map(m => m._id);
+  
+  // Get all connections for these machines
+  const connections = await connectionsCollection.find({
+    $or: [
+      { machineId: { $in: machineIds } },
+      { machineId: { $in: machineObjectIds } }
+    ]
+  }).toArray();
+  
+  // Group connections by machine ID and deduplicate by MAC address
+  const connectionsByMachine = new Map<string, Map<string, any>>();
+  connections.forEach(conn => {
+    const machineId = typeof conn.machineId === 'string' 
+      ? conn.machineId 
+      : conn.machineId.toString();
+    
+    if (!connectionsByMachine.has(machineId)) {
+      connectionsByMachine.set(machineId, new Map());
+    }
+    
+    const macMap = connectionsByMachine.get(machineId)!;
+    const mac = conn.mac;
+    
+    // Only add if MAC doesn't exist, or if it exists but this one has more complete info
+    if (!macMap.has(mac)) {
+      macMap.set(mac, {
+        mac: mac,
+        nodeType: conn.nodeType || null,
+        sensorType: conn.sensorType || null,
+      });
+    } else {
+      // If MAC already exists, prefer the one with more complete info (nodeType/sensorType)
+      const existing = macMap.get(mac)!;
+      if ((!existing.nodeType && conn.nodeType) || (!existing.sensorType && conn.sensorType)) {
+        macMap.set(mac, {
+          mac: mac,
+          nodeType: conn.nodeType || existing.nodeType || null,
+          sensorType: conn.sensorType || existing.sensorType || null,
+        });
+      }
+    }
+  });
+  
+  // Convert Map to Array for each machine
+  const connectionsByMachineArray = new Map<string, any[]>();
+  connectionsByMachine.forEach((macMap, machineId) => {
+    connectionsByMachineArray.set(machineId, Array.from(macMap.values()));
+  });
+  
+  // Combine machines with their connections
+  return machines.map(machine => {
+    const machineId = machine._id.toString();
+    const nodes = connectionsByMachineArray.get(machineId) || [];
+    
+    return {
+      ...machine,
+      _id: machineId,
+      nodes: nodes,
+    };
+  });
 }
 
 /**
@@ -160,6 +235,55 @@ export async function getLabs(): Promise<Lab[]> {
   return labs.map(lab => ({
     ...lab,
     _id: lab._id.toString(),
+  }));
+}
+
+/**
+ * Get labs for a specific user (labs where user is in user_id array)
+ */
+export async function getLabsForUser(userId: string): Promise<Lab[]> {
+  const db = await connectToDatabase();
+  const collection = db.collection('labs');
+  const { ObjectId } = await import('mongodb');
+  
+  let userObjectId: any;
+  try {
+    userObjectId = new ObjectId(userId);
+  } catch (error) {
+    // If userId is not a valid ObjectId, try searching as string
+    const labs = await collection.find({
+      user_id: userId
+    }).toArray();
+    
+    return labs.map(lab => ({
+      _id: lab._id.toString(),
+      name: lab.name,
+      description: lab.description,
+    }));
+  }
+  
+  // Find labs where user_id array contains the user's ObjectId
+  const labs = await collection.find({
+    user_id: userObjectId
+  }).toArray();
+  
+  // If no labs found with ObjectId, try string format
+  if (labs.length === 0) {
+    const labsString = await collection.find({
+      user_id: userId
+    }).toArray();
+    
+    return labsString.map(lab => ({
+      _id: lab._id.toString(),
+      name: lab.name,
+      description: lab.description,
+    }));
+  }
+  
+  return labs.map(lab => ({
+    _id: lab._id.toString(),
+    name: lab.name,
+    description: lab.description,
   }));
 }
 
