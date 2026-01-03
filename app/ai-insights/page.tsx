@@ -190,7 +190,7 @@ export default function AIInsightsPage() {
       });
 
       // Count unique machines that had maintenance
-      const machinesWithMaintenance = new Set(
+      const machinesWithMaintenance = new Set<string>(
         relevantWorkOrders.map((wo: any) => wo.machineId)
       );
 
