@@ -71,7 +71,7 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
       <div className="bg-dark-panel border border-dark-border rounded-lg p-6">
         <h2 className="heading-inter heading-inter-sm text-white mb-4 flex items-center gap-2">
           <ClockIcon className="w-5 h-5" />
-          Downtime Statistics
+          Performance
         </h2>
         <div className="text-gray-400">Loading downtime data...</div>
       </div>
@@ -83,7 +83,7 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
       <div className="bg-dark-panel border border-dark-border rounded-lg p-6">
         <h2 className="heading-inter heading-inter-sm text-white mb-4 flex items-center gap-2">
           <ClockIcon className="w-5 h-5" />
-          Downtime Statistics
+          Performance
         </h2>
         <div className="text-red-400">Error loading downtime data</div>
       </div>
@@ -126,7 +126,7 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
       <div className="flex items-center justify-between mb-4">
         <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
           <ClockIcon className="w-5 h-5" />
-          Downtime Statistics
+          Performance
         </h2>
         <span className="text-xs text-gray-500">{timeRangeLabel}</span>
       </div>

@@ -38,7 +38,7 @@ export default function ShopfloorsPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
 
   // Check if user is logged in and get user data
   useEffect(() => {
@@ -71,10 +71,14 @@ export default function ShopfloorsPage() {
 
       if (data.success) {
         setLabs(data.labs || []);
-        // Auto-select first lab if available
+        // Auto-select Dawlance lab if available, otherwise first lab
         if (data.labs && data.labs.length > 0) {
-          setSelectedLabId(data.labs[0]._id);
-          fetchMachinesForLab(data.labs[0]._id);
+          const dawlanceLab = data.labs.find((lab: Lab) => 
+            lab.name.toLowerCase().includes('dawlance')
+          );
+          const labToSelect = dawlanceLab || data.labs[0];
+          setSelectedLabId(labToSelect._id);
+          fetchMachinesForLab(labToSelect._id);
         }
       } else {
         toast.error('Failed to fetch labs');
@@ -179,14 +183,12 @@ export default function ShopfloorsPage() {
         </div>
 
         {/* Lab/Shopfloor Dropdown */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Select Shopfloor/Lab
-          </label>
+        <div className="flex items-center gap-4 mt-4">
+          <label className="text-gray-400">Shopfloor/Lab:</label>
           <select
             value={selectedLabId}
             onChange={handleLabChange}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[300px]"
+            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[200px]"
             disabled={loading || labs.length === 0}
           >
             <option value="">

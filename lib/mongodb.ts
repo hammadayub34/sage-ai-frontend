@@ -28,9 +28,24 @@ export async function connectToDatabase(): Promise<Db> {
   }
 
   if (!client) {
-    client = new MongoClient(uri);
-    await client.connect();
-    console.log('✅ Connected to MongoDB');
+    const mongoUri = process.env.MONGODB_URI || uri;
+    console.log(`[MongoDB] Connecting to MongoDB...`);
+    console.log(`[MongoDB] URI configured: ${mongoUri ? 'Yes' : 'No'}`);
+    console.log(`[MongoDB] Using ${process.env.MONGODB_URI ? 'environment variable' : 'fallback URI'}`);
+    
+    try {
+      client = new MongoClient(mongoUri);
+      await client.connect();
+      console.log('✅ Connected to MongoDB');
+    } catch (error: any) {
+      console.error('[MongoDB] Connection error:', error);
+      console.error('[MongoDB] Error details:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+      });
+      throw new Error(`MongoDB connection failed: ${error.message}`);
+    }
   }
 
   cachedDb = client.db(dbName);

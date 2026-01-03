@@ -7,11 +7,12 @@ import { AlarmHistory } from '@/components/AlarmHistory';
 import { AlarmEvents } from '@/components/AlarmEvents';
 import { DowntimeStats } from '@/components/DowntimeStats';
 import { WorkOrderForm } from '@/components/WorkOrderForm';
-import { RefreshIcon, ChartIcon } from '@/components/Icons';
-import { useState, useEffect } from 'react';
+import { RefreshIcon, SignalIcon } from '@/components/Icons';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { VibrationChart } from '@/components/VibrationChart';
+import { ModbusChart } from '@/components/ModbusChart';
 import { toast } from 'react-toastify';
 
 interface Lab {
@@ -20,22 +21,54 @@ interface Lab {
   description?: string;
 }
 
+interface Node {
+  mac: string;
+  nodeType: string | null;
+  sensorType: string | null;
+}
+
 interface Machine {
   _id: string;
   machineName: string;
   labId: string;
   status: 'active' | 'inactive';
   description?: string;
+  nodes?: Node[];
 }
 
 export default function Dashboard() {
   const router = useRouter();
   const [selectedLabId, setSelectedLabId] = useState<string>('');
   const [selectedMachineId, setSelectedMachineId] = useState<string>('');
+  const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [labs, setLabs] = useState<Lab[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  
+  // Check if selected machine is CNC Machine A (has Modbus data)
+  const isCNCMachineA = selectedMachine?.machineName === 'CNC Machine A' || selectedMachine?._id === '6958155ea4f09743147b22ab';
+  const selectedMachineMAC = selectedMachine?.nodes && selectedMachine.nodes.length > 0 ? selectedMachine.nodes[0].mac : '';
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('[Dashboard] Selected Machine:', {
+      name: selectedMachine?.machineName,
+      id: selectedMachine?._id,
+      isCNCMachineA,
+      macAddress: selectedMachineMAC,
+      nodes: selectedMachine?.nodes
+    });
+  }, [selectedMachine, isCNCMachineA, selectedMachineMAC]);
+  
+  // Set default tab based on machine type
+  useEffect(() => {
+    if (isCNCMachineA && chartTab === 'vibration') {
+      setChartTab('pressure');
+    } else if (!isCNCMachineA && chartTab !== 'vibration' && chartTab !== 'current') {
+      setChartTab('vibration');
+    }
+  }, [isCNCMachineA]);
   
   // Check if user is logged in
   useEffect(() => {
@@ -64,17 +97,39 @@ export default function Dashboard() {
     try {
       setLoading(true);
       const response = await fetch(`/api/labs/user?userId=${userId}`);
+      
+      // Log response details for debugging
+      console.log(`[Dashboard] Labs API response status: ${response.status}`);
+      console.log(`[Dashboard] Labs API response ok: ${response.ok}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error(`[Dashboard] Labs API error (${response.status}):`, errorData);
+        toast.error(`Failed to fetch labs: ${errorData.error || `HTTP ${response.status}`}`);
+        setLabs([]);
+        return;
+      }
+      
       const data = await response.json();
+      console.log(`[Dashboard] Labs API response data:`, data);
 
       if (data.success) {
         setLabs(data.labs || []);
-        // Auto-select first lab if available
+        // Auto-select Dawlance lab if available, otherwise first lab
         if (data.labs && data.labs.length > 0) {
-          setSelectedLabId(data.labs[0]._id);
-          fetchMachinesForLab(data.labs[0]._id);
+          const dawlanceLab = data.labs.find((lab: Lab) => 
+            lab.name.toLowerCase().includes('dawlance')
+          );
+          const labToSelect = dawlanceLab || data.labs[0];
+          setSelectedLabId(labToSelect._id);
+          fetchMachinesForLab(labToSelect._id);
+        } else {
+          console.warn('[Dashboard] No labs found for user');
+          toast.warning('No labs found for your account');
         }
       } else {
-        toast.error('Failed to fetch labs');
+        console.error('[Dashboard] Failed to fetch labs:', data.error);
+        toast.error(`Failed to fetch labs: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error fetching labs:', error);
@@ -95,9 +150,12 @@ export default function Dashboard() {
         setMachines(data.machines || []);
         // Auto-select first machine if available
         if (data.machines && data.machines.length > 0) {
-          setSelectedMachineId(data.machines[0]._id);
+          const firstMachine = data.machines[0];
+          setSelectedMachineId(firstMachine._id);
+          setSelectedMachine(firstMachine);
         } else {
           setSelectedMachineId('');
+          setSelectedMachine(null);
         }
       } else {
         toast.error('Failed to fetch machines');
@@ -128,11 +186,14 @@ export default function Dashboard() {
 
   // Handle machine selection change
   const handleMachineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedMachineId(e.target.value);
+    const machineId = e.target.value;
+    setSelectedMachineId(machineId);
+    const machine = machines.find(m => m._id === machineId) || null;
+    setSelectedMachine(machine);
   };
 
   const [workOrderFormOpen, setWorkOrderFormOpen] = useState(false);
-  const [chartTab, setChartTab] = useState<'spindle' | 'vibration' | 'current' | 'images'>('vibration');
+  const [chartTab, setChartTab] = useState<'vibration' | 'pressure' | 'density' | 'flow' | 'temperature' | 'current'>('vibration');
   const [selectedTimeRange, setSelectedTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
   const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -160,8 +221,8 @@ export default function Dashboard() {
       <div className="mb-6">
         {/* Analytics Heading */}
         <div className="flex items-center gap-3 mb-4">
-          <ChartIcon className="w-8 h-8 text-sage-400" />
-          <h1 className="heading-inter heading-inter-lg">AI Insights</h1>
+          <SignalIcon className="w-6 h-6 text-sage-400" />
+          <h1 className="heading-inter heading-inter-lg">Monitoring</h1>
         </div>
         
         {/* Shopfloor/Lab and Machine Selection */}
@@ -223,47 +284,145 @@ export default function Dashboard() {
         <div className="mb-6">
           <div className="bg-dark-panel rounded-lg border border-dark-border">
             {/* Tabs */}
-            <div className="flex border-b border-dark-border">
-              <button
-                onClick={() => setChartTab('vibration')}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${
-                  chartTab === 'vibration'
-                    ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
-                    : 'text-gray-400 hover:text-gray-300'
-                }`}
-              >
-                Vibration
-              </button>
-              <button
-                onClick={() => setChartTab('current')}
-                className={`px-6 py-3 text-sm font-medium transition-colors ${
-                  chartTab === 'current'
-                    ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
-                    : 'text-gray-400 hover:text-gray-300'
-                }`}
-              >
-                Current
-              </button>
+            <div className="flex border-b border-dark-border flex-wrap">
+              {isCNCMachineA ? (
+                // Modbus tabs for CNC Machine A
+                <>
+                  <button
+                    onClick={() => setChartTab('pressure')}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      chartTab === 'pressure'
+                        ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Pressure
+                  </button>
+                  <button
+                    onClick={() => setChartTab('flow')}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      chartTab === 'flow'
+                        ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Diff Pressure/Freq
+                  </button>
+                  <button
+                    onClick={() => setChartTab('density')}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      chartTab === 'density'
+                        ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Instantaneous Flow
+                  </button>
+                  <button
+                    onClick={() => setChartTab('temperature')}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      chartTab === 'temperature'
+                        ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Density
+                  </button>
+                </>
+              ) : (
+                // Vibration tab for other machines
+                <>
+                  <button
+                    onClick={() => setChartTab('vibration')}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      chartTab === 'vibration'
+                        ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Vibration
+                  </button>
+                  <button
+                    onClick={() => setChartTab('current')}
+                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                      chartTab === 'current'
+                        ? 'text-sage-400 border-b-2 border-sage-400 bg-dark-bg/50'
+                        : 'text-gray-400 hover:text-gray-300'
+                    }`}
+                  >
+                    Current
+                  </button>
+                </>
+              )}
             </div>
             
             {/* Chart Content */}
             <div>
-              {chartTab === 'vibration' ? (
-                <VibrationChart 
-                  machineId={selectedMachineId}
-                  timeRange={`-${selectedTimeRange}`}
-                  onTimeRangeChange={setSelectedTimeRange}
-                />
+              {isCNCMachineA ? (
+                // Modbus charts for CNC Machine A
+                <>
+                  {chartTab === 'pressure' && (
+                    <ModbusChart
+                      machineId={selectedMachineId}
+                      macAddress={selectedMachineMAC || '10:06:1C:86:F9:54'}
+                      field="Pressure"
+                      fieldLabel="Pressure"
+                      timeRange={`-${selectedTimeRange}`}
+                      onTimeRangeChange={setSelectedTimeRange}
+                    />
+                  )}
+                  {chartTab === 'flow' && (
+                    <ModbusChart
+                      machineId={selectedMachineId}
+                      macAddress={selectedMachineMAC || '10:06:1C:86:F9:54'}
+                      field="Differential pressure/frequency"
+                      fieldLabel="Diff Pressure/Freq"
+                      timeRange={`-${selectedTimeRange}`}
+                      onTimeRangeChange={setSelectedTimeRange}
+                    />
+                  )}
+                  {chartTab === 'density' && (
+                    <ModbusChart
+                      machineId={selectedMachineId}
+                      macAddress={selectedMachineMAC || '10:06:1C:86:F9:54'}
+                      field="Instantaneous_flow"
+                      fieldLabel="Instantaneous Flow"
+                      timeRange={`-${selectedTimeRange}`}
+                      onTimeRangeChange={setSelectedTimeRange}
+                    />
+                  )}
+                  {chartTab === 'temperature' && (
+                    <ModbusChart
+                      machineId={selectedMachineId}
+                      macAddress={selectedMachineMAC || '10:06:1C:86:F9:54'}
+                      field="Density"
+                      fieldLabel="Density"
+                      timeRange={`-${selectedTimeRange}`}
+                      onTimeRangeChange={setSelectedTimeRange}
+                    />
+                  )}
+                </>
               ) : (
-                <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-                  <h3 className="heading-inter heading-inter-sm mb-4">Current Values</h3>
-                  <div className="text-yellow-400">
-                    <div className="mb-2">No data available in InfluxDB</div>
-                    <div className="text-sm text-gray-500">
-                      Time range: -1h | Machine: {selectedMachineId}
+                // Vibration chart for other machines
+                <>
+                  {chartTab === 'vibration' ? (
+                    <VibrationChart 
+                      machineId={selectedMachineId}
+                      timeRange={`-${selectedTimeRange}`}
+                      onTimeRangeChange={setSelectedTimeRange}
+                    />
+                  ) : (
+                    <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
+                      <h3 className="heading-inter heading-inter-sm mb-4">Current Values</h3>
+                      <div className="text-yellow-400">
+                        <div className="mb-2">No data available in InfluxDB</div>
+                        <div className="text-sm text-gray-500">
+                          Time range: -1h | Machine: {selectedMachineId}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -300,7 +459,11 @@ export default function Dashboard() {
 
       {/* Tags Table */}
       {selectedMachineId && (
-        <TagsTable machineId={selectedMachineId} />
+        <TagsTable 
+          machineId={selectedMachineId} 
+          macAddress={selectedMachineMAC}
+          machineName={selectedMachine?.machineName}
+        />
       )}
 
       {/* Work Order Form Modal */}

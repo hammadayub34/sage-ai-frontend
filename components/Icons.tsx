@@ -298,3 +298,14 @@ export const ArrowRightIcon = ({ className = "w-5 h-5", size }: IconProps) => (
   </svg>
 );
 
+export const SignalIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Center circle - larger and more prominent */}
+    <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
+    {/* Inner curved arc - expanding signal wave - thicker */}
+    <path d="M5 12a7 7 0 0 1 7-7" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round"/>
+    {/* Outer curved arc - larger expanding signal wave - thicker */}
+    <path d="M1 12a11 11 0 0 1 11-11" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round"/>
+  </svg>
+);
+

@@ -53,7 +53,6 @@ export default function WorkOrdersPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [filters, setFilters] = useState({
-    machineId: '',
     status: '',
     priority: '',
   });
@@ -75,7 +74,6 @@ export default function WorkOrdersPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.machineId) params.append('machineId', filters.machineId);
       if (filters.status) params.append('status', filters.status);
       if (filters.priority) params.append('priority', filters.priority);
 
@@ -418,16 +416,6 @@ export default function WorkOrdersPage() {
 
         {/* Filters - Show in both views */}
         <div className="flex items-center gap-4 mb-6">
-          <div>
-            <label className="text-gray-400 text-sm mr-2">Machine ID:</label>
-            <input
-              type="text"
-              value={filters.machineId}
-              onChange={(e) => setFilters({ ...filters, machineId: e.target.value })}
-              placeholder="Filter by machine..."
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-1 focus:ring-midnight-300"
-            />
-          </div>
           <div>
             <label className="text-gray-400 text-sm mr-2">Status:</label>
             <select

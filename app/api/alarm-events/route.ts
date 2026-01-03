@@ -13,10 +13,10 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
 
     // Use NEXT_PUBLIC_ vars if available, otherwise fallback to defaults (same pattern as other API routes)
-    const url = process.env.NEXT_PUBLIC_INFLUXDB_URL || process.env.INFLUXDB_URL || 'http://localhost:8086';
-    const token = process.env.NEXT_PUBLIC_INFLUXDB_TOKEN || process.env.INFLUXDB_TOKEN || 'my-super-secret-auth-token';
-    const org = process.env.NEXT_PUBLIC_INFLUXDB_ORG || process.env.INFLUXDB_ORG || 'myorg';
-    const bucket = process.env.INFLUXDB_BUCKET_ALARMS || 'alarm_events';
+    const url = process.env.NEXT_PUBLIC_INFLUXDB_URL || process.env.INFLUXDB_URL || 'https://influxtest.wisermachines.com';
+    const token = process.env.NEXT_PUBLIC_INFLUXDB_TOKEN || process.env.INFLUXDB_TOKEN || '1MrRJ8q-zSnlt9HRZMeY5YNhOQZWbi6Xk-oU6pFFTSbJRv4V32cTJutWMJota0r6t_F6N5zXOfE6IXHYmcUk4Q==';
+    const org = process.env.NEXT_PUBLIC_INFLUXDB_ORG || process.env.INFLUXDB_ORG || 'wisermachines';
+    const bucket = process.env.INFLUXDB_BUCKET_ALARMS || 'wisermachines-test';
 
     const client = new InfluxDB({ url, token });
     const queryApi = client.getQueryApi(org);

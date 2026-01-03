@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { formatAlarmName } from '@/lib/utils';
-import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, AlarmEventsIcon } from '@/components/Icons';
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, NotificationIcon } from '@/components/Icons';
 import { AlarmInstructions } from '@/components/AlarmInstructions';
+import { toast } from 'react-toastify';
 
 interface Alert {
   timestamp: string;
@@ -16,18 +18,126 @@ interface Alert {
   value: boolean;
 }
 
+interface Lab {
+  _id: string;
+  name: string;
+}
+
+interface Machine {
+  _id: string;
+  machineName: string;
+  labId: string;
+  status: 'active' | 'inactive';
+}
+
 export default function AlarmEventsPage() {
-  const [selectedMachine, setSelectedMachine] = useState<string>('');
+  const router = useRouter();
+  const [selectedLabId, setSelectedLabId] = useState<string>('');
+  const [selectedMachineId, setSelectedMachineId] = useState<string>('');
+  const [labs, setLabs] = useState<Lab[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [selectedState, setSelectedState] = useState<string>('');
   const [timeRange, setTimeRange] = useState<string>('7d');
   const [expandedAlerts, setExpandedAlerts] = useState<Set<string>>(new Set());
 
+  // Check if user is logged in
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = localStorage.getItem('isLoggedIn');
+      const userStr = localStorage.getItem('user');
+      
+      if (!isLoggedIn || !userStr) {
+        router.push('/login');
+        return;
+      }
+      
+      try {
+        const userData = JSON.parse(userStr);
+        setUser(userData);
+        fetchUserLabs(userData._id);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        router.push('/login');
+      }
+    }
+  }, [router]);
+
+  // Fetch labs for the logged-in user
+  const fetchUserLabs = async (userId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/labs/user?userId=${userId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch labs');
+      }
+      const data = await response.json();
+      if (data.success) {
+        setLabs(data.labs || []);
+        // Auto-select first lab if available
+        if (data.labs && data.labs.length > 0) {
+          setSelectedLabId(data.labs[0]._id);
+          fetchMachinesForLab(data.labs[0]._id);
+        }
+      } else {
+        toast.error('Failed to fetch labs');
+      }
+    } catch (error: any) {
+      console.error('Error fetching labs:', error);
+      toast.error('Failed to load labs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch machines for selected lab
+  useEffect(() => {
+    if (selectedLabId) {
+      fetchMachinesForLab(selectedLabId);
+    } else {
+      setMachines([]);
+      setSelectedMachineId('');
+    }
+  }, [selectedLabId]);
+
+  const fetchMachinesForLab = async (labId: string) => {
+    try {
+      const response = await fetch(`/api/machines?labId=${labId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch machines');
+      }
+      const data = await response.json();
+      setMachines(data.machines || []);
+      // Auto-select first machine if available
+      if (data.machines && data.machines.length > 0) {
+        setSelectedMachineId(data.machines[0]._id);
+      } else {
+        setSelectedMachineId('');
+      }
+    } catch (error: any) {
+      console.error('Error fetching machines:', error);
+      toast.error('Failed to load machines');
+      setMachines([]);
+    }
+  };
+
+  const handleLabChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const labId = e.target.value;
+    setSelectedLabId(labId);
+    setSelectedMachineId(''); // Reset machine selection when lab changes
+  };
+
+  const handleMachineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedMachineId(e.target.value);
+  };
+
   const { data, isLoading, error, refetch } = useQuery<{ alerts: Alert[] }>({
-    queryKey: ['alarm-events', selectedMachine, selectedState, timeRange],
+    queryKey: ['alarm-events', selectedMachineId, selectedState, timeRange],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (selectedMachine) {
-        params.append('machineId', selectedMachine);
+      if (selectedMachineId) {
+        params.append('machineId', selectedMachineId);
       }
       params.append('limit', '500');
       
@@ -63,7 +173,7 @@ export default function AlarmEventsPage() {
   
   // Filter alerts
   const filteredAlerts = alerts.filter(alert => {
-    if (selectedMachine && alert.machine_id !== selectedMachine) return false;
+    if (selectedMachineId && alert.machine_id !== selectedMachineId) return false;
     if (selectedState && alert.state !== selectedState) return false;
     return true;
   });
@@ -112,47 +222,68 @@ export default function AlarmEventsPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <AlarmEventsIcon className="w-8 h-8 text-sage-400" />
-            <h1 className="heading-inter heading-inter-lg">Events</h1>
+            <NotificationIcon className="w-8 h-8 text-sage-400" />
+            <h1 className="heading-inter heading-inter-lg">Notifications</h1>
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-4 mb-6">
-          <div>
-            <label className="text-gray-400 text-sm mr-2">Machine ID:</label>
-            <input
-              type="text"
-              value={selectedMachine}
-              onChange={(e) => setSelectedMachine(e.target.value)}
-              placeholder="Filter by machine..."
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-1 focus:ring-midnight-300"
-            />
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm mr-2">State:</label>
-            <select
-              value={selectedState}
-              onChange={(e) => setSelectedState(e.target.value)}
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
-            >
-              <option value="">All</option>
-              <option value="RAISED">Raised</option>
-              <option value="CLEARED">Cleared</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-gray-400 text-sm mr-2">Time Range:</label>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
-            >
-              <option value="24h">Last 24 hours</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-            </select>
-          </div>
+        {/* Shopfloor/Lab, Machine, State, and Time Range Selection */}
+        <div className="flex items-center gap-4 mt-4 mb-6">
+          <label className="text-gray-400">Shopfloor/Lab:</label>
+          <select
+            value={selectedLabId}
+            onChange={handleLabChange}
+            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[200px]"
+            disabled={loading || labs.length === 0}
+          >
+            <option value="">
+              {loading ? 'Loading labs...' : labs.length === 0 ? 'No labs available' : 'Select a lab...'}
+            </option>
+            {labs.map((lab) => (
+              <option key={lab._id} value={lab._id}>
+                {lab.name}
+              </option>
+            ))}
+          </select>
+          
+          <label className="text-gray-400">Equipment:</label>
+          <select
+            value={selectedMachineId}
+            onChange={handleMachineChange}
+            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[200px]"
+            disabled={loading || !selectedLabId || machines.length === 0}
+          >
+            <option value="">
+              {!selectedLabId ? 'Select a lab first...' : loading ? 'Loading machines...' : machines.length === 0 ? 'No machines in this lab' : 'Select a machine...'}
+            </option>
+            {machines.map((machine) => (
+              <option key={machine._id} value={machine._id}>
+                {machine.machineName}
+              </option>
+            ))}
+          </select>
+
+          <label className="text-gray-400">State:</label>
+          <select
+            value={selectedState}
+            onChange={(e) => setSelectedState(e.target.value)}
+            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[150px]"
+          >
+            <option value="">All</option>
+            <option value="RAISED">Raised</option>
+            <option value="CLEARED">Cleared</option>
+          </select>
+
+          <label className="text-gray-400">Time Range:</label>
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[150px]"
+          >
+            <option value="24h">Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
         </div>
       </div>
 

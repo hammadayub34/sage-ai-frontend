@@ -1,23 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePLCData } from '@/hooks/usePLCData';
+import { useModbusLatest } from '@/hooks/useModbusLatest';
 import { PLCData } from '@/types/plc-data';
 import { SettingsIcon, ChartIcon, TrendingUpIcon, LockIcon, WrenchIcon, DropletIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, WarningIcon } from './Icons';
 
 interface TagsTableProps {
   machineId?: string;
   machineType?: string;
+  macAddress?: string;
+  machineName?: string;
 }
 
-export function TagsTable({ machineId = 'machine-01', machineType }: TagsTableProps) {
+export function TagsTable({ machineId = 'machine-01', machineType, macAddress, machineName }: TagsTableProps) {
   const { data, isLoading, error } = usePLCData(machineId, machineType);
+  
+  // Check if this is CNC Machine A (has Modbus data)
+  const isCNCMachineA = machineName === 'CNC Machine A' || machineId === '6958155ea4f09743147b22ab';
+  const modbusMAC = macAddress || (isCNCMachineA ? '10:06:1C:86:F9:54' : '');
+  
+  // Fetch latest Modbus values if it's CNC Machine A
+  const { data: modbusLatest, isLoading: modbusLoading } = useModbusLatest(
+    isCNCMachineA ? machineId : '',
+    modbusMAC
+  );
   const [isExpanded, setIsExpanded] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     status: true,
-    counter: true,
     analog: true,
-    input: true,
     tooling: true,
     coolant: true,
   });
@@ -111,10 +122,9 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
     { label: 'Fault', value: !data.Fault, type: 'boolean' }, // Invert
     { label: 'Auto Mode', value: data.AutoMode, type: 'boolean' },
   ] : [
-    { label: 'System Running', value: data.SystemRunning, type: 'boolean' },
-    { label: 'Fault', value: !data.Fault, type: 'boolean' }, // Invert
-    { label: 'Filling', value: data.Filling, type: 'boolean' },
-    { label: 'Ready', value: data.Ready, type: 'boolean' },
+    { label: 'System Running', value: true, type: 'boolean' },
+    { label: 'Fault', value: false, type: 'boolean' },
+    { label: 'Ready', value: true, type: 'boolean' },
   ];
 
   const counterFields = isLathe ? [
@@ -130,7 +140,13 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
 
   // Alarm fields removed - shown in Alarm Events and Alarm History sections instead
 
-  const analogFields = isLathe ? [
+  // Use Modbus data for CNC Machine A, otherwise use PLC data
+  const analogFields = isCNCMachineA && modbusLatest ? [
+    { label: 'Pressure', value: modbusLatest['Pressure']?.value, type: 'number', unit: '', time: modbusLatest['Pressure']?.time },
+    { label: 'Diff Pressure/Freq', value: modbusLatest['Diff Pressure/Freq']?.value, type: 'number', unit: '', time: modbusLatest['Diff Pressure/Freq']?.time },
+    { label: 'Instantaneous Flow', value: modbusLatest['Instantaneous Flow']?.value, type: 'number', unit: '', time: modbusLatest['Instantaneous Flow']?.time },
+    { label: 'Density', value: modbusLatest['Density']?.value, type: 'number', unit: '', time: modbusLatest['Density']?.time },
+  ] : isLathe ? [
     { label: 'Spindle Speed', value: data.SpindleSpeed, type: 'number', unit: 'RPM' },
     { label: 'Spindle Speed Setpoint', value: data.SpindleSpeedSetpoint, type: 'number', unit: 'RPM' },
     { label: 'Spindle Load', value: data.SpindleLoad, type: 'number', unit: '%' },
@@ -271,35 +287,6 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           )}
         </div>
 
-        {/* Counter Fields */}
-        <div className="border border-dark-border rounded-lg overflow-hidden">
-          <div 
-            className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
-            onClick={() => toggleSection('counter')}
-          >
-            <div className="flex items-center gap-2">
-              <ChartIcon className="w-5 h-5 text-gray-300" />
-              <span className="text-gray-300 heading-inter heading-inter-sm">Counter Fields</span>
-            </div>
-            {expandedSections.counter ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
-          </div>
-          {expandedSections.counter && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-              {counterFields.map((field) => (
-                <div 
-                  key={field.label} 
-                  className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
-                >
-                  <div className="text-gray-400 text-sm mb-2">{field.label}</div>
-                  <div className="text-2xl font-bold text-white">
-                    {formatValue(field.value, field.type)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Analog Fields */}
         <div className="border border-dark-border rounded-lg overflow-hidden">
           <div 
@@ -314,51 +301,36 @@ export function TagsTable({ machineId = 'machine-01', machineType }: TagsTablePr
           </div>
           {expandedSections.analog && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-              {analogFields.map((field) => (
-                <div 
-                  key={field.label} 
-                  className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
-                >
-                  <div className="text-gray-400 text-sm mb-2">{field.label}</div>
-                  <div className="text-2xl font-bold text-white">
-                    {formatValue(field.value, field.type, field.unit)}
+              {isCNCMachineA && modbusLoading ? (
+                <div className="col-span-full text-center text-gray-400 py-4">Loading Modbus data...</div>
+              ) : analogFields.length > 0 ? (
+                analogFields.map((field) => (
+                  <div 
+                    key={field.label} 
+                    className="border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors bg-midnight-200/20"
+                  >
+                    <div className="text-gray-400 text-sm mb-2">{field.label}</div>
+                    <div className="text-2xl font-bold text-white">
+                      {field.value !== undefined && field.value !== null 
+                        ? formatValue(field.value, field.type, field.unit)
+                        : 'N/A'}
+                    </div>
+                    {field.time && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {new Date(field.time).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Input Fields / Safety Fields */}
-        <div className="border border-dark-border rounded-lg overflow-hidden">
-          <div 
-            className="bg-midnight-200/50 px-4 py-3 cursor-pointer hover:bg-midnight-200 transition-colors flex items-center justify-between"
-            onClick={() => toggleSection('input')}
-          >
-            <div className="flex items-center gap-2">
-              <LockIcon className="w-5 h-5 text-gray-300" />
-              <span className="text-gray-300 heading-inter heading-inter-sm">{isLathe ? 'Safety Fields' : 'Input Fields'}</span>
-            </div>
-            {expandedSections.input ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
-          </div>
-          {expandedSections.input && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-              {inputFields.map((field) => (
-                <div 
-                  key={field.label} 
-                  className={`border border-dark-border rounded-lg p-4 hover:border-midnight-300 transition-colors ${
-                    field.value ? 'bg-sage-500/10' : 'bg-gray-800/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-400 text-sm">{field.label}</span>
-                    <div className={`w-3 h-3 rounded-full ${field.value ? 'bg-sage-500' : 'bg-gray-600'}`} />
-                  </div>
-                  <div className={`text-xl font-bold ${getStatusColor(field.value, field.type)}`}>
-                    {field.value ? '✓' : '✗'} {formatValue(field.value, field.type)}
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="col-span-full text-center text-gray-400 py-4">No analog data available</div>
+              )}
             </div>
           )}
         </div>
