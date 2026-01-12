@@ -5,12 +5,22 @@ import { CloseIcon, AIIcon, CheckIcon, TrashIcon } from './Icons';
 import { formatAlarmName } from '@/lib/utils';
 import { toast } from 'react-toastify';
 
+interface Machine {
+  _id: string;
+  machineName: string;
+  labId: string;
+  description?: string;
+  status?: 'active' | 'inactive';
+}
+
 interface WorkOrderFormProps {
   isOpen: boolean;
   onClose: () => void;
   machineId?: string;
   alarmType?: string;
   machineType?: 'bottlefiller' | 'lathe';
+  machine?: Machine | null; // Full machine object from dashboard
+  shopfloorName?: string; // Shopfloor/lab name from dashboard
 }
 
 interface Part {
@@ -32,7 +42,9 @@ export function WorkOrderForm({
   onClose, 
   machineId = '', 
   alarmType = '',
-  machineType = 'bottlefiller'
+  machineType = 'bottlefiller',
+  machine: machineFromProps = null,
+  shopfloorName: shopfloorNameFromProps = ''
 }: WorkOrderFormProps) {
   const [loading, setLoading] = useState(false);
   const [autoFilling, setAutoFilling] = useState(false);
@@ -40,8 +52,8 @@ export function WorkOrderForm({
   const [loadingPinecone, setLoadingPinecone] = useState(false);
   const [formData, setFormData] = useState({
     // Header
-    companyName: 'MQTT-OT Network Production System',
-    priority: 'Medium',
+    companyName: '', // Will be filled with shopfloor (lab) name
+    priority: '',
     
     // Work Order Details
     workOrderNo: '',
@@ -73,7 +85,7 @@ export function WorkOrderForm({
     // Task Information
     taskNumber: '',
     frequency: '',
-    workPerformedBy: 'Maintenance Department',
+    workPerformedBy: '',
     standardHours: '',
     overtimeHours: '',
     
@@ -96,29 +108,203 @@ export function WorkOrderForm({
     { description: '', quantity: '', partNumber: '' }
   ]);
 
+  // Helper function to calculate ISO week number
+  const getISOWeekNumber = (date: Date): number => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  };
+
+  // Reset form to completely empty state
+  const resetForm = () => {
+    setFormData({
+      companyName: '',
+      priority: '',
+      workOrderNo: '',
+      weekNo: '',
+      weekOf: '',
+      equipmentName: '',
+      equipmentNumber: '',
+      equipmentLocation: '',
+      equipmentDescription: '',
+      location: '',
+      building: '',
+      floor: '',
+      room: '',
+      specialInstructions: '',
+      shop: '',
+      vendor: '',
+      vendorAddress: '',
+      vendorPhone: '',
+      vendorContact: '',
+      taskNumber: '',
+      frequency: '',
+      workPerformedBy: '',
+      standardHours: '',
+      overtimeHours: '',
+      workDescription: '',
+      workPerformed: '',
+      workCompleted: false,
+      machineId: '',
+      alarmType: '',
+      machineType: 'bottlefiller',
+    });
+    setParts([{ partNumber: '', description: '', quantity: '', qtyInStock: '', location: '' }]);
+    setMaterials([{ description: '', quantity: '', partNumber: '' }]);
+    setPineconeInfo(null);
+    setLoadingPinecone(false);
+    setAutoFilling(false);
+    setLoading(false);
+  };
+
+  // Reset form when form closes
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm();
+    }
+  }, [isOpen]);
+
   // Update formData when form opens or machineId/machineType props change
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
       const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      const weekNo = getISOWeekNumber(now);
+      const weekOf = now.toISOString().slice(0, 10);
       
-      setFormData(prev => ({
-        ...prev,
-        // Always update machine context when form opens or props change
-        machineId: machineId,
-        machineType: machineType,
-        alarmType: alarmType,
-        // Update equipment fields with current machineId
-        equipmentName: machineId,
-        equipmentNumber: machineId,
-        equipmentLocation: machineId,
-        // Generate new work order number if form just opened
-        workOrderNo: prev.workOrderNo || `WO-${dateStr}-${random}`,
-        weekOf: prev.weekOf || now.toISOString().slice(0, 10),
-      }));
+      // Always generate work order number when form opens
+      const generatedWorkOrderNo = `WO-${dateStr}-${random}`;
+      
+      // Use machine and shopfloor data from props (already selected on dashboard)
+      const machine = machineFromProps;
+      const shopfloorName = shopfloorNameFromProps;
+      
+      if (machine && shopfloorName) {
+        // We have all the data we need from props - use it directly!
+        const machineName = machine.machineName || machineId;
+        const machineIdFromDB = machine._id || machineId;
+        const machineDescription = machine.description || '';
+        
+        setFormData(prev => ({
+          ...prev,
+          // Machine context
+          machineId: machineIdFromDB,
+          machineType: machineType,
+          alarmType: alarmType,
+          // Equipment Information from props (MongoDB data)
+          equipmentName: machineName,
+          equipmentNumber: machineIdFromDB,
+          equipmentLocation: machineName,
+          equipmentDescription: machineDescription,
+          // Shopfloor (lab name) from props
+          companyName: shopfloorName,
+          // Always generate new work order number when form opens
+          workOrderNo: generatedWorkOrderNo,
+          weekNo: weekNo.toString(),
+          weekOf: weekOf,
+          // Default vendor information
+          shop: prev.shop || 'Maintenance Shop',
+          vendor: prev.vendor || 'Industrial Equipment Solutions Inc.',
+          vendorAddress: prev.vendorAddress || '123 Industrial Park Blvd, Manufacturing District, City, State 12345',
+          vendorPhone: prev.vendorPhone || '(555) 123-4567',
+          vendorContact: prev.vendorContact || 'John Smith - Service Manager',
+        }));
+      } else if (machineId) {
+        // Fallback: fetch machine info from API if props not provided
+        const fetchMachineInfo = async () => {
+          try {
+            const machineResponse = await fetch(`/api/machines?machineId=${machineId}`);
+            if (machineResponse.ok) {
+              const machineData = await machineResponse.json();
+              if (machineData.success && machineData.machine) {
+                const fetchedMachine = machineData.machine;
+                const machineName = fetchedMachine.machineName || machineId;
+                const machineIdFromDB = fetchedMachine._id || machineId;
+                const machineDescription = fetchedMachine.description || '';
+                
+                // Get shopfloor name
+                let fetchedShopfloorName = '';
+                if (fetchedMachine.labId) {
+                  try {
+                    const labsResponse = await fetch('/api/labs');
+                    if (labsResponse.ok) {
+                      const labsData = await labsResponse.json();
+                      if (labsData.success && labsData.labs) {
+                        const lab = labsData.labs.find((l: any) => {
+                          const labId = l._id?.toString() || l._id;
+                          const machineLabId = fetchedMachine.labId?.toString() || fetchedMachine.labId;
+                          return labId === machineLabId;
+                        });
+                        if (lab) {
+                          fetchedShopfloorName = lab.name;
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error fetching shopfloor (lab) name:', error);
+                  }
+                }
+                
+                setFormData(prev => ({
+                  ...prev,
+                  machineId: machineIdFromDB,
+                  machineType: machineType,
+                  alarmType: alarmType,
+                  equipmentName: machineName,
+                  equipmentNumber: machineIdFromDB,
+                  equipmentLocation: machineName,
+                  equipmentDescription: machineDescription,
+                  companyName: fetchedShopfloorName,
+                  workOrderNo: generatedWorkOrderNo,
+                  weekNo: weekNo.toString(),
+                  weekOf: weekOf,
+                  // Default vendor information
+                  shop: prev.shop || 'Maintenance Shop',
+                  vendor: prev.vendor || 'Industrial Equipment Solutions Inc.',
+                  vendorAddress: prev.vendorAddress || '123 Industrial Park Blvd, Manufacturing District, City, State 12345',
+                  vendorPhone: prev.vendorPhone || '(555) 123-4567',
+                  vendorContact: prev.vendorContact || 'John Smith - Service Manager',
+                }));
+                return;
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching machine info:', error);
+          }
+          
+          // Final fallback: just update context fields
+          setFormData(prev => ({
+            ...prev,
+            machineId: machineId,
+            machineType: machineType,
+            alarmType: alarmType,
+            equipmentName: prev.equipmentName || '',
+            equipmentNumber: prev.equipmentNumber || '',
+            equipmentLocation: prev.equipmentLocation || '',
+            workOrderNo: generatedWorkOrderNo,
+            weekNo: weekNo.toString(),
+            weekOf: weekOf,
+          }));
+        };
+        
+        fetchMachineInfo();
+      } else {
+        // No machine ID - just update context
+        setFormData(prev => ({
+          ...prev,
+            machineId: machineId,
+            machineType: machineType,
+            alarmType: alarmType,
+            workOrderNo: generatedWorkOrderNo,
+            weekNo: weekNo.toString(),
+            weekOf: weekOf,
+        }));
+      }
     }
-  }, [isOpen, machineId, machineType, alarmType]);
+  }, [isOpen, machineId, machineType, alarmType, machineFromProps, shopfloorNameFromProps]);
 
   // Don't auto-check on form open - user will click the button
 
@@ -230,114 +416,276 @@ export function WorkOrderForm({
 
   const handleGetPineconeInfo = async () => {
     if (!machineId) {
+      toast.error('Machine ID is required for AI Auto Fill');
       return;
     }
 
     setLoadingPinecone(true);
     setPineconeInfo(null);
     
+    // Ensure work order number and week info are set before proceeding
+    setFormData(prev => {
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      const weekNo = getISOWeekNumber(now);
+      const weekOf = now.toISOString().slice(0, 10);
+      
+      // Only set if they're empty
+      if (!prev.workOrderNo || !prev.weekNo || !prev.weekOf) {
+        return {
+          ...prev,
+          workOrderNo: prev.workOrderNo || `WO-${dateStr}-${random}`,
+          weekNo: prev.weekNo || weekNo.toString(),
+          weekOf: prev.weekOf || weekOf,
+        };
+      }
+      return prev;
+    });
+    
     try {
-      // Step 1: Check alarm thresholds
-      const thresholdResponse = await fetch('/api/work-order/check-thresholds', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          machineId,
-          machineType,
-          timeRange: '-24h',
-          customThreshold: 50,
-        }),
-      });
-
-      if (!thresholdResponse.ok) {
-        throw new Error('Failed to check alarm thresholds');
+      // Step 0: Use machine and shopfloor info from props (already selected on dashboard)
+      let shopfloorName = shopfloorNameFromProps;
+      let machineInfo: any = machineFromProps;
+      
+      // If props not provided, fetch from API
+      if (!machineInfo && machineId) {
+        const machineResponse = await fetch(`/api/machines?machineId=${machineId}`);
+        if (machineResponse.ok) {
+          const machineData = await machineResponse.json();
+          if (machineData.success && machineData.machine) {
+            machineInfo = machineData.machine;
+          }
+        }
+      }
+      
+      // If shopfloor name not provided, fetch it
+      if (!shopfloorName && machineInfo?.labId) {
+        try {
+          const labsResponse = await fetch('/api/labs');
+          if (labsResponse.ok) {
+            const labsData = await labsResponse.json();
+            if (labsData.success && labsData.labs) {
+              const lab = labsData.labs.find((l: any) => {
+                const labId = l._id?.toString() || l._id;
+                const machineLabId = machineInfo.labId?.toString() || machineInfo.labId;
+                return labId === machineLabId;
+              });
+              if (lab) {
+                shopfloorName = lab.name;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching shopfloor (lab) name:', error);
+        }
       }
 
-      const thresholdData = await thresholdResponse.json();
-
-      // Step 2: If threshold breached, get info from Pinecone and auto-fill
-      if (thresholdData.shouldGenerateWorkOrder && thresholdData.exceededAlarms.length > 0) {
-        // Use the first exceeded alarm (or provided alarmType if available)
-        const alarmToUse = alarmType || thresholdData.exceededAlarms[0];
-
-        // Update alarmType in form data
-        setFormData(prev => ({
-          ...prev,
-          alarmType: alarmToUse,
-        }));
-
-        // Query Pinecone directly and get structured data
-        const fillStartTime = Date.now();
-        const fillResponse = await fetch('/api/work-order/pinecone-fill', {
+      // Determine which alarm/issue to use
+      let alarmToUse = alarmType;
+      let documentType = 'maintenance_work_order';
+      let issueType = 'alarm';
+      const CRITICAL_DOWNTIME_THRESHOLD = 10; // 10% downtime is considered critical
+      
+      // Step 1: Check alarm thresholds (only if no alarmType is provided)
+      if (!alarmType) {
+        const thresholdResponse = await fetch('/api/work-order/check-thresholds', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             machineId,
-            alarmType: alarmToUse,
             machineType,
+            timeRange: '-24h',
+            customThreshold: 50,
           }),
         });
 
-        if (fillResponse.ok) {
-          const fillData = await fillResponse.json();
-          const fillTime = Date.now() - fillStartTime;
-          console.log(`[Form] Pinecone fill completed in ${fillTime}ms`);
-          if (fillData.timings) {
-            console.log('[Form] API timings:', fillData.timings);
-          }
-          console.log('Pinecone fill response:', fillData);
-          
-          if (fillData.success && fillData.workOrder) {
-            console.log('Filling form with work order data:', fillData.workOrder);
-            
-            // Fill in the form fields directly
-            setFormData(prev => {
-              const updated = {
-                ...prev,
-                ...fillData.workOrder,
-                workOrderNo: prev.workOrderNo, // Keep generated number
-                machineId: prev.machineId,
-                alarmType: alarmToUse,
-                machineType: prev.machineType,
-              };
-              console.log('Updated form data:', updated);
-              return updated;
-            });
-
-            // Fill parts if available
-            if (fillData.workOrder.parts && fillData.workOrder.parts.length > 0) {
-              console.log('Setting parts:', fillData.workOrder.parts);
-              setParts(fillData.workOrder.parts);
-            }
-
-            // Fill materials if available
-            if (fillData.workOrder.materials && fillData.workOrder.materials.length > 0) {
-              console.log('Setting materials:', fillData.workOrder.materials);
-              setMaterials(fillData.workOrder.materials);
-            }
-
-            const formattedAlarmName = formatAlarmName(alarmToUse);
-            setPineconeInfo(`Form filled for ${formattedAlarmName}`);
-          } else {
-            console.error('No work order data in response:', fillData);
-            setPineconeInfo(fillData.error || 'No maintenance information found in Pinecone for this alarm type.');
-          }
-        } else {
-          const errorData = await fillResponse.json().catch(() => ({}));
-          console.error('Fill response error:', errorData);
-          setPineconeInfo(`Error: ${errorData.error || 'Failed to get information from Pinecone.'}`);
+        if (!thresholdResponse.ok) {
+          const errorData = await thresholdResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to check alarm thresholds');
         }
-      } else {
-        // No threshold breached
-        setPineconeInfo('No alarms exceeded the threshold (50 occurrences). No work order needed at this time.');
+
+        const thresholdData = await thresholdResponse.json();
+
+        // If threshold breached, use the first exceeded alarm
+        if (thresholdData.shouldGenerateWorkOrder && thresholdData.exceededAlarms.length > 0) {
+          alarmToUse = thresholdData.exceededAlarms[0];
+        } else {
+          // No alarms exceeded - check downtime incidents
+          console.log('[AI Auto Fill] No alarms exceeded, checking downtime incidents...');
+          const downtimeResponse = await fetch(`/api/influxdb/downtime?machineId=${machineId}&timeRange=-7d`);
+          
+          if (downtimeResponse.ok) {
+            const downtimeData = await downtimeResponse.json();
+            if (downtimeData.data) {
+              const downtimePercentage = downtimeData.data.downtimePercentage || 0;
+              const incidentCount = downtimeData.data.incidentCount || 0;
+              const periods = downtimeData.data.periods || [];
+              
+              console.log(`[AI Auto Fill] Downtime: ${downtimePercentage.toFixed(2)}%, Incidents: ${incidentCount}`);
+              
+              // If there are ANY downtime incidents, assume motor vibration issue
+              if (incidentCount > 0) {
+                console.log(`[AI Auto Fill] Downtime incidents detected (${incidentCount} incidents, ${downtimePercentage.toFixed(2)}% downtime), assuming motor vibration issue`);
+                documentType = 'vibration';
+                issueType = 'vibration';
+                alarmToUse = `Motor Vibration Issue - ${incidentCount} downtime incident${incidentCount > 1 ? 's' : ''} (${downtimePercentage.toFixed(1)}% downtime)`;
+                toast.info(`Detected ${incidentCount} downtime incident${incidentCount > 1 ? 's' : ''}. Assuming motor vibration issue and filling form accordingly.`);
+              } else {
+                // No downtime incidents
+                setPineconeInfo(`No alarms exceeded threshold and no downtime incidents detected (${downtimePercentage.toFixed(1)}% downtime). Please specify an alarm type or wait for issues to occur.`);
+                toast.info('No alarms exceeded threshold and no downtime incidents. You can still use AI Auto Fill if you specify an alarm type.');
+                return;
+              }
+            } else {
+              // No downtime data available
+              setPineconeInfo('No alarms exceeded the threshold (50 occurrences). Please specify an alarm type or wait for threshold to be exceeded.');
+              toast.info('No alarms exceeded threshold. You can still use AI Auto Fill if you specify an alarm type.');
+              return;
+            }
+          } else {
+            // Downtime check failed, but continue with no alarm
+            setPineconeInfo('No alarms exceeded the threshold (50 occurrences). Please specify an alarm type or wait for threshold to be exceeded.');
+            toast.info('No alarms exceeded threshold. You can still use AI Auto Fill if you specify an alarm type.');
+            return;
+          }
+        }
       }
-    } catch (error) {
+
+      // Update alarmType in form data
+      if (alarmToUse) {
+        setFormData(prev => ({
+          ...prev,
+          alarmType: alarmToUse,
+          companyName: shopfloorName, // Use shopfloor (lab) name
+        }));
+      }
+
+      // Step 2: Query Pinecone and auto-fill
+      const fillStartTime = Date.now();
+      const fillResponse = await fetch('/api/work-order/pinecone-fill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          machineId,
+          alarmType: alarmToUse,
+          machineType,
+          documentType,
+          issueType,
+        }),
+      });
+
+      if (!fillResponse.ok) {
+        const errorData = await fillResponse.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Failed to get information from Pinecone';
+        console.error('Fill response error:', errorData);
+        setPineconeInfo(`Error: ${errorMessage}`);
+        toast.error(`AI Auto Fill failed: ${errorMessage}`);
+        return;
+      }
+
+      const fillData = await fillResponse.json();
+      const fillTime = Date.now() - fillStartTime;
+      console.log(`[Form] Pinecone fill completed in ${fillTime}ms`);
+      if (fillData.timings) {
+        console.log('[Form] API timings:', fillData.timings);
+      }
+      console.log('Pinecone fill response:', fillData);
+      
+      if (fillData.success && fillData.workOrder) {
+        console.log('Filling form with work order data:', fillData.workOrder);
+        
+        // Fill in the form fields directly
+        setFormData(prev => {
+          const workOrder = fillData.workOrder;
+          // Get machine info from MongoDB (already fetched above)
+          const machineName = machineInfo?.machineName || machineId;
+          const machineIdFromDB = machineInfo?._id || machineId;
+          const machineDescription = machineInfo?.description || '';
+          
+          const updated = {
+            ...prev,
+            // Shopfloor Name - always use lab name from MongoDB
+            companyName: shopfloorName || prev.companyName,
+            
+            // Priority
+            priority: workOrder.priority || prev.priority,
+            
+            // Equipment Information - prioritize MongoDB data, then AI-filled data, then keep existing
+            equipmentName: machineName || workOrder.equipmentName || prev.equipmentName,
+            equipmentNumber: machineIdFromDB || workOrder.equipmentNumber || prev.equipmentNumber,
+            equipmentLocation: machineName || workOrder.equipmentLocation || prev.equipmentLocation,
+            equipmentDescription: machineDescription || workOrder.equipmentDescription || prev.equipmentDescription,
+            
+            // Location Information
+            location: workOrder.location || prev.location,
+            building: workOrder.building || prev.building,
+            floor: workOrder.floor || prev.floor,
+            room: workOrder.room || prev.room,
+            
+            // Special Instructions
+            specialInstructions: workOrder.specialInstructions || prev.specialInstructions,
+            
+            // Shop/Vendor Information
+            shop: workOrder.shop || prev.shop,
+            vendor: workOrder.vendor || prev.vendor,
+            vendorAddress: workOrder.vendorAddress || prev.vendorAddress,
+            vendorPhone: workOrder.vendorPhone || prev.vendorPhone,
+            vendorContact: workOrder.vendorContact || prev.vendorContact,
+            
+            // Task Information
+            taskNumber: workOrder.taskNumber || prev.taskNumber,
+            frequency: workOrder.frequency || prev.frequency,
+            workPerformedBy: workOrder.workPerformedBy || prev.workPerformedBy,
+            standardHours: workOrder.standardHours || prev.standardHours,
+            overtimeHours: workOrder.overtimeHours || prev.overtimeHours,
+            
+            // Work Description
+            workDescription: workOrder.workDescription || prev.workDescription,
+            workPerformed: workOrder.workPerformed || prev.workPerformed,
+            
+            // Preserve these fields - DO NOT overwrite with AI data
+            workOrderNo: prev.workOrderNo, // Keep generated work order number
+            weekNo: prev.weekNo, // Keep calculated week number
+            weekOf: prev.weekOf, // Keep week of date
+            machineId: prev.machineId, // Keep machine ID
+            machineType: prev.machineType, // Keep machine type
+            alarmType: alarmToUse || prev.alarmType, // Update alarm type if found
+            workCompleted: prev.workCompleted, // Keep work completed status
+          };
+          console.log('Updated form data:', updated);
+          return updated;
+        });
+
+        // Fill parts if available
+        if (fillData.workOrder.parts && fillData.workOrder.parts.length > 0) {
+          console.log('Setting parts:', fillData.workOrder.parts);
+          setParts(fillData.workOrder.parts);
+        }
+
+        // Fill materials if available
+        if (fillData.workOrder.materials && fillData.workOrder.materials.length > 0) {
+          console.log('Setting materials:', fillData.workOrder.materials);
+          setMaterials(fillData.workOrder.materials);
+        }
+
+        const formattedAlarmName = formatAlarmName(alarmToUse || '');
+        setPineconeInfo(`Form filled for ${formattedAlarmName}`);
+        toast.success(`Work order form auto-filled for ${formattedAlarmName}`);
+      } else {
+        console.error('No work order data in response:', fillData);
+        setPineconeInfo(fillData.error || 'No maintenance information found in Pinecone for this alarm type.');
+        toast.error(fillData.error || 'No maintenance information found in Pinecone for this alarm type.');
+      }
+    } catch (error: any) {
       console.error('Error:', error);
-      setPineconeInfo('Error: Failed to check thresholds or query Pinecone. Make sure the maintenance manual is embedded.');
+      const errorMessage = error.message || 'Failed to check thresholds or query Pinecone. Make sure the maintenance manual is embedded.';
+      setPineconeInfo(`Error: ${errorMessage}`);
+      toast.error(`AI Auto Fill error: ${errorMessage}`);
     } finally {
       setLoadingPinecone(false);
     }
@@ -467,41 +815,7 @@ export function WorkOrderForm({
       
       onClose();
       
-      // Reset form
-      setFormData({
-        companyName: 'MQTT-OT Network Production System',
-        priority: 'Medium',
-        workOrderNo: '',
-        weekNo: '',
-        weekOf: '',
-        equipmentName: '',
-        equipmentNumber: '',
-        equipmentLocation: '',
-        equipmentDescription: '',
-        location: '',
-        building: '',
-        floor: '',
-        room: '',
-        specialInstructions: '',
-        shop: '',
-        vendor: '',
-        vendorAddress: '',
-        vendorPhone: '',
-        vendorContact: '',
-        taskNumber: '',
-        frequency: '',
-        workPerformedBy: 'Maintenance Department',
-        standardHours: '',
-        overtimeHours: '',
-        workDescription: '',
-        workPerformed: '',
-        workCompleted: false,
-        machineId: '',
-        alarmType: '',
-        machineType: 'bottlefiller',
-      });
-      setParts([{ partNumber: '', description: '', quantity: '', qtyInStock: '', location: '' }]);
-      setMaterials([{ description: '', quantity: '', partNumber: '' }]);
+      // Form will be reset by useEffect when isOpen becomes false
     } catch (error: any) {
       console.error('[WorkOrderForm] Submit error:', error);
       const errorMessage = error.message || 'Failed to save work order. Please try again.';
@@ -578,11 +892,18 @@ export function WorkOrderForm({
             <button
               onClick={handleGetPineconeInfo}
               disabled={loadingPinecone || !machineId}
-              className="px-4 py-2 bg-sage-500/20 hover:bg-sage-500/30 border border-sage-500/40 text-sage-400 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              title="AI Auto Fill - Automatically fill form fields from maintenance manual"
+              className={`px-4 py-2 rounded text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
+                loadingPinecone
+                  ? 'bg-sage-500/10 border border-sage-500/20 text-sage-400/40 opacity-40 blur-[1px] cursor-not-allowed'
+                  : 'bg-sage-500/20 hover:bg-sage-500/30 border border-sage-500/40 text-sage-400 hover:text-sage-300 disabled:opacity-30 disabled:cursor-not-allowed disabled:blur-[0.5px]'
+              }`}
+              title={loadingPinecone ? "Filling form with AI-generated information..." : "AI Auto Fill - Automatically fill form fields from maintenance manual"}
             >
               {loadingPinecone ? (
-                'Gathering Info...'
+                <>
+                  <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-sage-400 animate-pulse">Gathering Info...</span>
+                </>
               ) : (
                 <>
                   <AIIcon className="w-4 h-4" />

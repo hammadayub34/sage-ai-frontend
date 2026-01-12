@@ -471,6 +471,8 @@ export default function Dashboard() {
         isOpen={workOrderFormOpen}
         onClose={() => setWorkOrderFormOpen(false)}
         machineId={selectedMachineId || ''}
+        machine={selectedMachine}
+        shopfloorName={labs.find(lab => lab._id === selectedLabId)?.name || ''}
       />
     </div>
   );
