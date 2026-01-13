@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChartIcon, CalendarIcon, ShopfloorsIcon, ChevronDownIcon, ChevronRightIcon, AlertIcon, ClockIcon, TrendingUpIcon } from '@/components/Icons';
+import { ChartIcon, CalendarIcon, ShopfloorsIcon, ChevronDownIcon, ChevronRightIcon, AlertIcon, ClockIcon, TrendingUpIcon, ArrowUpIcon, ArrowDownIcon } from '@/components/Icons';
 import { toast } from 'react-toastify';
 
 interface Shift {
@@ -41,6 +41,7 @@ export default function AIInsightsPage() {
   const [labs, setLabs] = useState<Lab[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [maintenanceStats, setMaintenanceStats] = useState<MaintenanceStats | null>(null);
+  const [previousMonthStats, setPreviousMonthStats] = useState<MaintenanceStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -54,8 +55,63 @@ export default function AIInsightsPage() {
   const [selectedShift, setSelectedShift] = useState<string>('');
   const [labShifts, setLabShifts] = useState<Shift[]>([]);
   const [shiftUtilization, setShiftUtilization] = useState<any>(null);
+  const [previousMonthShiftUtilization, setPreviousMonthShiftUtilization] = useState<any>(null);
   const [loadingShiftUtilization, setLoadingShiftUtilization] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date()); // Default to current month
   const fetchingWiseAnalysisRef = useRef(false);
+
+  // Helper component to show comparison with previous month
+  const ComparisonBadge = ({ current, previous, format = (val: number) => val.toFixed(1), isPercentage = false, lowerIsBetter = false }: { current: number; previous: number | null; format?: (val: number) => string; isPercentage?: boolean; lowerIsBetter?: boolean }) => {
+    if (previous === null || previous === undefined) {
+      return null;
+    }
+    
+    const diff = current - previous;
+    const isIncrease = diff > 0;
+    const isBetter = lowerIsBetter ? !isIncrease : isIncrease;
+    
+    return (
+      <div className="flex items-center gap-1 mt-1">
+        <span className="text-xs text-gray-500">
+          Prev: {format(previous)}{isPercentage ? '%' : ''}
+        </span>
+        {Math.abs(diff) > 0.01 && (
+          <span className={`text-xs ${isBetter ? 'text-green-400' : 'text-red-400'}`}>
+            {isIncrease ? (
+              <ArrowUpIcon className="w-3 h-3 inline" />
+            ) : (
+              <ArrowDownIcon className="w-3 h-3 inline" />
+            )}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  // Helper function to get month name
+  const getMonthName = (date: Date) => {
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  // Helper function to get start and end dates for a month
+  const getMonthDateRange = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999); // Last day of month
+    return { startDate, endDate };
+  };
+
+  // Generate list of months for dropdown (last 12 months)
+  const getAvailableMonths = () => {
+    const months: Date[] = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(date);
+    }
+    return months;
+  };
 
   // Check if user is logged in
   useEffect(() => {
@@ -156,10 +212,16 @@ export default function AIInsightsPage() {
   }, [selectedLabId, fetchLabWithShifts]);
 
   // Fetch shift utilization data
-  const fetchShiftUtilization = useCallback(async (labId: string, shiftName: string) => {
+  const fetchShiftUtilization = useCallback(async (labId: string, shiftName: string, month?: Date) => {
     setLoadingShiftUtilization(true);
     try {
-      const response = await fetch(`/api/shift-utilization?labId=${labId}&shiftName=${shiftName}&days=30`);
+      const selectedMonthDate = month || selectedMonth;
+      const { startDate: monthStart, endDate: monthEnd } = getMonthDateRange(selectedMonthDate);
+      const prevMonthDate = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() - 1, 1);
+      const { startDate: prevMonthStart, endDate: prevMonthEnd } = getMonthDateRange(prevMonthDate);
+      
+      // Fetch current month
+      const response = await fetch(`/api/shift-utilization?labId=${labId}&shiftName=${shiftName}&startDate=${monthStart.toISOString().split('T')[0]}&endDate=${monthEnd.toISOString().split('T')[0]}`);
       if (!response.ok) {
         throw new Error('Failed to fetch shift utilization');
       }
@@ -169,6 +231,20 @@ export default function AIInsightsPage() {
       } else {
         throw new Error(data.error || 'Failed to fetch shift utilization');
       }
+
+      // Fetch previous month for comparison
+      try {
+        const prevResponse = await fetch(`/api/shift-utilization?labId=${labId}&shiftName=${shiftName}&startDate=${prevMonthStart.toISOString().split('T')[0]}&endDate=${prevMonthEnd.toISOString().split('T')[0]}`);
+        if (prevResponse.ok) {
+          const prevData = await prevResponse.json();
+          if (prevData.success) {
+            setPreviousMonthShiftUtilization(prevData.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching previous month shift utilization:', error);
+        setPreviousMonthShiftUtilization(null);
+      }
     } catch (error: any) {
       console.error('Error fetching shift utilization:', error);
       toast.error('Failed to load shift utilization data');
@@ -176,16 +252,17 @@ export default function AIInsightsPage() {
     } finally {
       setLoadingShiftUtilization(false);
     }
-  }, []);
+  }, [selectedMonth]);
 
   // Fetch shift utilization when shift is selected
   useEffect(() => {
     if (selectedLabId && selectedShift) {
-      fetchShiftUtilization(selectedLabId, selectedShift);
+      fetchShiftUtilization(selectedLabId, selectedShift, selectedMonth);
     } else {
       setShiftUtilization(null);
+      setPreviousMonthShiftUtilization(null);
     }
-  }, [selectedLabId, selectedShift, fetchShiftUtilization]);
+  }, [selectedLabId, selectedShift, selectedMonth, fetchShiftUtilization]);
 
   // Optimized: Fetch all data for selected lab in parallel
   useEffect(() => {
@@ -199,19 +276,19 @@ export default function AIInsightsPage() {
       return;
     }
 
-    // Reset wise analysis when lab or shift changes (but keep expanded)
+    // Reset wise analysis when lab, shift, or month changes (but keep expanded)
     setWiseAnalysis(null);
-    setWiseAnalysisExpanded(true); // Keep expanded when lab/shift changes
+    setWiseAnalysisExpanded(true); // Keep expanded when lab/shift/month changes
     setLoadingWiseAnalysis(false);
     fetchingWiseAnalysisRef.current = false;
 
     // Fetch all data in parallel (will use shift-specific data if shift is selected)
-    fetchAllLabData(selectedLabId, selectedShift);
+    fetchAllLabData(selectedLabId, selectedShift, selectedMonth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLabId, selectedShift]);
+  }, [selectedLabId, selectedShift, selectedMonth]);
 
   // Optimized: Single function to fetch all lab data in parallel
-  const fetchAllLabData = async (labId: string, shiftName?: string) => {
+  const fetchAllLabData = async (labId: string, shiftName?: string, month?: Date) => {
     setLoadingStats(true);
     setLoadingAlerts(true);
     setLoadingDowntimeIncidents(true);
@@ -247,10 +324,15 @@ export default function AIInsightsPage() {
         return;
       }
 
-      // Step 2: Fetch all independent data in parallel
-      const now = new Date();
-      const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      // Step 2: Calculate date range for selected month
+      const selectedMonthDate = month || selectedMonth;
+      const { startDate: monthStart, endDate: monthEnd } = getMonthDateRange(selectedMonthDate);
+      
+      // Calculate previous month for comparison
+      const prevMonthDate = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() - 1, 1);
+      const { startDate: prevMonthStart, endDate: prevMonthEnd } = getMonthDateRange(prevMonthDate);
 
+      // Step 3: Fetch all independent data in parallel
       const [workOrdersData, alertsResults] = await Promise.all([
         // Work orders
         fetch('/api/work-orders').then(res => res.ok ? res.json() : { data: [] }),
@@ -262,8 +344,8 @@ export default function AIInsightsPage() {
               const params = new URLSearchParams();
               params.append('machineId', machineId);
               params.append('limit', '1000');
-              params.append('startDate', oneMonthAgo.toISOString());
-              params.append('endDate', now.toISOString());
+              params.append('startDate', monthStart.toISOString());
+              params.append('endDate', monthEnd.toISOString());
               
               const res = await fetch(`/api/alarm-events?${params.toString()}`);
               if (res.ok) {
@@ -282,7 +364,7 @@ export default function AIInsightsPage() {
       const allWorkOrders = workOrdersData.data || [];
       const relevantWorkOrders = allWorkOrders.filter((wo: any) => {
         const workOrderDate = new Date(wo.createdAt || wo._time);
-        return workOrderDate >= oneMonthAgo && machineIds.includes(wo.machineId);
+        return workOrderDate >= monthStart && workOrderDate <= monthEnd && machineIds.includes(wo.machineId);
       });
       const machinesWithMaintenance = new Set<string>(
         relevantWorkOrders.map((wo: any) => wo.machineId)
@@ -376,46 +458,46 @@ export default function AIInsightsPage() {
         console.log('[AI Insights] No shift utilization data found, falling back to InfluxDB downtime calculation');
         try {
           // Fetch downtime from InfluxDB for all machines and aggregate
-          const downtimePromises = machineIds.map(async (machineId: string) => {
-            try {
+        const downtimePromises = machineIds.map(async (machineId: string) => {
+          try {
               const downtimeRes = await fetch(`/api/influxdb/downtime?machineId=${machineId}&timeRange=-30d`);
               if (downtimeRes.ok) {
                 const downtimeData = await downtimeRes.json();
                 if (downtimeData.totalDowntime !== undefined && downtimeData.totalUptime !== undefined) {
-                  return {
+                return {
                     downtime: downtimeData.totalDowntime || 0,
                     uptime: downtimeData.totalUptime || 0,
                     timePeriod: (downtimeData.totalDowntime || 0) + (downtimeData.totalUptime || 0),
                     incidents: downtimeData.incidentCount || 0,
-                  };
-                }
+                };
               }
-            } catch (error) {
-              console.error(`Error fetching InfluxDB downtime for machine ${machineId}:`, error);
             }
+          } catch (error) {
+              console.error(`Error fetching InfluxDB downtime for machine ${machineId}:`, error);
+          }
             return { downtime: 0, uptime: 0, timePeriod: 0, incidents: 0 };
-          });
-          
-          const downtimeResults = await Promise.all(downtimePromises);
-          downtimeResults.forEach(result => {
-            totalDowntime += result.downtime;
-            totalUptime += result.uptime;
+        });
+
+        const downtimeResults = await Promise.all(downtimePromises);
+        downtimeResults.forEach(result => {
+          totalDowntime += result.downtime;
+          totalUptime += result.uptime;
             totalTimePeriod += result.timePeriod;
             totalIncidents += result.incidents;
-          });
-          
+        });
+
           // If still no data from InfluxDB, assume machine is not running
           if (totalTimePeriod === 0) {
-            const thirtyDaysInSeconds = 30 * 24 * 60 * 60;
-            totalTimePeriod = thirtyDaysInSeconds * machineIds.length;
-            totalDowntime = totalTimePeriod; // Assume 100% downtime (machine not running) if no data at all
-            totalUptime = 0;
-          }
-        } catch (error) {
-          console.error('Error fetching InfluxDB downtime as fallback:', error);
-          // If InfluxDB also fails, assume machine is not running
           const thirtyDaysInSeconds = 30 * 24 * 60 * 60;
           totalTimePeriod = thirtyDaysInSeconds * machineIds.length;
+            totalDowntime = totalTimePeriod; // Assume 100% downtime (machine not running) if no data at all
+            totalUptime = 0;
+        }
+      } catch (error) {
+          console.error('Error fetching InfluxDB downtime as fallback:', error);
+          // If InfluxDB also fails, assume machine is not running
+          const monthSeconds = Math.ceil((monthEnd.getTime() - monthStart.getTime()) / 1000);
+          totalTimePeriod = monthSeconds * machineIds.length;
           totalDowntime = totalTimePeriod; // Assume 100% downtime (machine not running) if no data at all
           totalUptime = 0;
         }
@@ -442,6 +524,104 @@ export default function AIInsightsPage() {
       });
       setAlertsCount(totalAlerts);
       setDowntimeIncidentsCount(totalIncidents);
+
+      // Fetch previous month data for comparison
+      try {
+        // Fetch previous month work orders
+        const prevWorkOrdersData = await fetch('/api/work-orders').then(res => res.ok ? res.json() : { data: [] });
+        const prevWorkOrders = prevWorkOrdersData.data || [];
+        const prevRelevantWorkOrders = prevWorkOrders.filter((wo: any) => {
+          const workOrderDate = new Date(wo.createdAt || wo._time);
+          return workOrderDate >= prevMonthStart && workOrderDate <= prevMonthEnd && machineIds.includes(wo.machineId);
+        });
+
+        // Fetch previous month shift utilization or InfluxDB data
+        let prevTotalDowntime = 0;
+        let prevTotalUptime = 0;
+        let prevTotalTimePeriod = 0;
+        let prevTotalIncidents = 0;
+
+        if (currentShift) {
+          try {
+            const prevUtilResponse = await fetch(`/api/shift-utilization?labId=${labId}&shiftName=${currentShift}&startDate=${prevMonthStart.toISOString().split('T')[0]}&endDate=${prevMonthEnd.toISOString().split('T')[0]}`).catch(() => null);
+            if (prevUtilResponse && prevUtilResponse.ok) {
+              const prevUtilData = await prevUtilResponse.json();
+              if (prevUtilData.success && prevUtilData.data) {
+                prevTotalDowntime = (prevUtilData.data.totalNonProductiveHours || 0) * 3600;
+                prevTotalUptime = ((prevUtilData.data.totalProductiveHours || 0) + (prevUtilData.data.totalIdleHours || 0)) * 3600;
+                prevTotalTimePeriod = (prevUtilData.data.totalScheduledHours || 0) * 3600;
+                prevTotalIncidents = prevUtilData.data.machineUtilizations.reduce((sum: number, m: any) => sum + (m.recordCount || 0), 0);
+              }
+          }
+        } catch (error) {
+            console.error('Error fetching previous month shift utilization:', error);
+          }
+        } else {
+          // Aggregate previous month across all shifts
+          try {
+            const labsResponse = await fetch('/api/labs');
+            if (labsResponse.ok) {
+              const labsData = await labsResponse.json();
+              if (labsData.success && labsData.labs) {
+                const lab = labsData.labs.find((l: any) => {
+                  const lId = l._id?.toString() || l._id;
+                  const selectedId = labId?.toString() || labId;
+                  return lId === selectedId;
+                });
+                
+                if (lab && lab.shifts && lab.shifts.length > 0) {
+                  const prevShiftPromises = lab.shifts.map(async (shift: Shift) => {
+                    try {
+                      const res = await fetch(`/api/shift-utilization?labId=${labId}&shiftName=${shift.name}&startDate=${prevMonthStart.toISOString().split('T')[0]}&endDate=${prevMonthEnd.toISOString().split('T')[0]}`).catch(() => null);
+                      if (res && res.ok) {
+                        const data = await res.json();
+                        if (data.success && data.data) {
+                          return {
+                            downtime: (data.data.totalNonProductiveHours || 0) * 3600,
+                            scheduled: (data.data.totalScheduledHours || 0) * 3600,
+                            productive: (data.data.totalProductiveHours || 0) * 3600,
+                            idle: (data.data.totalIdleHours || 0) * 3600,
+                            incidents: data.data.machineUtilizations.reduce((sum: number, m: any) => sum + (m.recordCount || 0), 0),
+                          };
+                        }
+                      }
+                    } catch (error) {
+                      console.error(`Error fetching previous month shift ${shift.name}:`, error);
+                    }
+                    return { downtime: 0, scheduled: 0, productive: 0, idle: 0, incidents: 0 };
+                  });
+                  
+                  const prevShiftResults = await Promise.all(prevShiftPromises);
+                  prevShiftResults.forEach(result => {
+                    prevTotalDowntime += result.downtime;
+                    prevTotalUptime += (result.productive + result.idle);
+                    prevTotalTimePeriod += result.scheduled;
+                    prevTotalIncidents += result.incidents;
+                  });
+                }
+              }
+          }
+        } catch (error) {
+            console.error('Error fetching previous month shifts:', error);
+          }
+        }
+
+        const prevDowntimePercentage = prevTotalTimePeriod > 0 ? (prevTotalDowntime / prevTotalTimePeriod) * 100 : 0;
+        const prevUptimePercentage = prevTotalTimePeriod > 0 ? (prevTotalUptime / prevTotalTimePeriod) * 100 : 0;
+
+        setPreviousMonthStats({
+          totalMachines: labMachines.length, // Same as current
+          scheduledMaintenanceCount: prevRelevantWorkOrders.length,
+          machinesWithMaintenance: [],
+          totalDowntime: prevTotalDowntime,
+          totalUptime: prevTotalUptime,
+          downtimePercentage: prevDowntimePercentage,
+          uptimePercentage: prevUptimePercentage,
+        });
+      } catch (error) {
+        console.error('Error fetching previous month data:', error);
+        setPreviousMonthStats(null);
+      }
 
     } catch (error: any) {
       console.error('Error fetching lab data:', error);
@@ -515,15 +695,15 @@ export default function AIInsightsPage() {
     try {
       // Prepare request body with shift information and utilization data
       const requestBody: any = {
-        labName: currentSelectedLab.name,
-        totalMachines: maintenanceStats.totalMachines,
-        scheduledMaintenanceCount: maintenanceStats.scheduledMaintenanceCount,
-        machinesWithMaintenance: maintenanceStats.machinesWithMaintenance.length,
-        totalDowntime: maintenanceStats.totalDowntime,
-        totalUptime: maintenanceStats.totalUptime,
-        downtimePercentage: maintenanceStats.downtimePercentage,
-        uptimePercentage: maintenanceStats.uptimePercentage,
-        timePeriod: 'Last Month',
+          labName: currentSelectedLab.name,
+          totalMachines: maintenanceStats.totalMachines,
+          scheduledMaintenanceCount: maintenanceStats.scheduledMaintenanceCount,
+          machinesWithMaintenance: maintenanceStats.machinesWithMaintenance.length,
+          totalDowntime: maintenanceStats.totalDowntime,
+          totalUptime: maintenanceStats.totalUptime,
+          downtimePercentage: maintenanceStats.downtimePercentage,
+          uptimePercentage: maintenanceStats.uptimePercentage,
+          timePeriod: getMonthName(selectedMonth),
         alertsCount: alertsCount,
         downtimeIncidentsCount: downtimeIncidentsCount,
       };
@@ -620,8 +800,8 @@ export default function AIInsightsPage() {
     // If shift is selected, wait for shift utilization data
     if (selectedShift) {
       if (shiftUtilization) {
-        fetchWiseAnalysis();
-      }
+      fetchWiseAnalysis();
+    }
     } else {
       // No shift selected, fetch immediately
       fetchWiseAnalysis();
@@ -647,8 +827,9 @@ export default function AIInsightsPage() {
           <h1 className="heading-inter heading-inter-lg">AI Insights</h1>
         </div>
 
-        {/* Lab Selection */}
-        <div className="flex items-center gap-4 mt-3">
+        {/* Lab Selection and Month Selector */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex items-center gap-4">
           <label className="text-gray-400">Shopfloor/Lab:</label>
           <select
             value={selectedLabId}
@@ -666,7 +847,25 @@ export default function AIInsightsPage() {
             ))}
           </select>
         </div>
+          <div className="flex items-center gap-3">
+            <label className="text-gray-400 text-sm">Month:</label>
+            <select
+              value={selectedMonth.toISOString().split('T')[0].substring(0, 7)}
+              onChange={(e) => {
+                const [year, month] = e.target.value.split('-');
+                setSelectedMonth(new Date(parseInt(year), parseInt(month) - 1, 1));
+              }}
+              className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[180px]"
+            >
+              {getAvailableMonths().map((month) => (
+                <option key={month.toISOString()} value={month.toISOString().split('T')[0].substring(0, 7)}>
+                  {getMonthName(month)}
+                </option>
+              ))}
+            </select>
       </div>
+              </div>
+            </div>
 
       {/* Shift Tabs - Right Side, Above Performance */}
       {selectedLabId && labShifts.length > 0 && (
@@ -800,7 +999,7 @@ export default function AIInsightsPage() {
               <ClockIcon className="w-5 h-5" />
               Performance
             </h2>
-            <span className="text-xs text-gray-500">Last Month</span>
+            <span className="text-xs text-gray-500">{getMonthName(selectedMonth)}</span>
           </div>
 
           {loadingStats ? (
@@ -826,6 +1025,12 @@ export default function AIInsightsPage() {
                 <div className="text-xs text-gray-500 mt-1">
                   {formatDuration(maintenanceStats.totalDowntime)}
                 </div>
+                <ComparisonBadge 
+                  current={maintenanceStats.downtimePercentage} 
+                  previous={previousMonthStats?.downtimePercentage ?? null}
+                  isPercentage={true}
+                  lowerIsBetter={true}
+                />
               </div>
 
               {/* Uptime Percentage */}
@@ -838,6 +1043,12 @@ export default function AIInsightsPage() {
                   <TrendingUpIcon className="w-3 h-3 inline mr-1" />
                   Availability
                 </div>
+                <ComparisonBadge 
+                  current={maintenanceStats.uptimePercentage} 
+                  previous={previousMonthStats?.uptimePercentage ?? null}
+                  isPercentage={true}
+                  lowerIsBetter={false}
+                />
               </div>
 
               {/* Total Machines */}
@@ -849,6 +1060,13 @@ export default function AIInsightsPage() {
                 <div className="text-xs text-gray-500 mt-1">
                   Active machines in {selectedLab?.name || 'selected lab'}
                 </div>
+                <ComparisonBadge 
+                  current={maintenanceStats.totalMachines} 
+                  previous={previousMonthStats?.totalMachines ?? null}
+                  format={(val) => val.toFixed(0)}
+                  isPercentage={false}
+                  lowerIsBetter={false}
+                />
               </div>
             </div>
           ) : null}
@@ -863,7 +1081,7 @@ export default function AIInsightsPage() {
               <ClockIcon className="w-5 h-5" />
               Shift Utilization - {formatShiftName(selectedShift)}
             </h2>
-            <span className="text-xs text-gray-500">Last Month</span>
+            <span className="text-xs text-gray-500">{getMonthName(selectedMonth)}</span>
           </div>
 
           {loadingShiftUtilization ? (
@@ -890,6 +1108,12 @@ export default function AIInsightsPage() {
                   <div className="text-xs text-gray-500 mt-1">
                     {shiftUtilization.machinesWithData} of {shiftUtilization.totalMachines} machines
                   </div>
+                  <ComparisonBadge 
+                    current={shiftUtilization.averageUtilization} 
+                    previous={previousMonthShiftUtilization?.averageUtilization ?? null}
+                    isPercentage={true}
+                    lowerIsBetter={false}
+                  />
                 </div>
 
                 {/* Productive Hours */}
@@ -901,6 +1125,13 @@ export default function AIInsightsPage() {
                   <div className="text-xs text-gray-500 mt-1">
                     Total hours
                   </div>
+                  <ComparisonBadge 
+                    current={shiftUtilization.totalProductiveHours} 
+                    previous={previousMonthShiftUtilization?.totalProductiveHours ?? null}
+                    format={(val) => val.toFixed(1)}
+                    isPercentage={false}
+                    lowerIsBetter={false}
+                  />
                 </div>
 
                 {/* Downtime Hours */}
@@ -912,6 +1143,13 @@ export default function AIInsightsPage() {
                   <div className="text-xs text-gray-500 mt-1">
                     Total hours
                   </div>
+                  <ComparisonBadge 
+                    current={shiftUtilization.totalNonProductiveHours} 
+                    previous={previousMonthShiftUtilization?.totalNonProductiveHours ?? null}
+                    format={(val) => val.toFixed(1)}
+                    isPercentage={false}
+                    lowerIsBetter={true}
+                  />
                 </div>
 
                 {/* Idle Hours */}
@@ -923,6 +1161,13 @@ export default function AIInsightsPage() {
                   <div className="text-xs text-gray-500 mt-1">
                     Total hours
                   </div>
+                  <ComparisonBadge 
+                    current={shiftUtilization.totalIdleHours} 
+                    previous={previousMonthShiftUtilization?.totalIdleHours ?? null}
+                    format={(val) => val.toFixed(1)}
+                    isPercentage={false}
+                    lowerIsBetter={false}
+                  />
                 </div>
 
                 {/* Scheduled Hours */}
@@ -934,6 +1179,13 @@ export default function AIInsightsPage() {
                   <div className="text-xs text-gray-500 mt-1">
                     Total hours
                   </div>
+                  <ComparisonBadge 
+                    current={shiftUtilization.totalScheduledHours} 
+                    previous={previousMonthShiftUtilization?.totalScheduledHours ?? null}
+                    format={(val) => val.toFixed(1)}
+                    isPercentage={false}
+                    lowerIsBetter={false}
+                  />
                 </div>
               </div>
 
@@ -1002,7 +1254,7 @@ export default function AIInsightsPage() {
               <CalendarIcon className="w-5 h-5" />
               Events
             </h2>
-            <span className="text-xs text-gray-500">Last Month</span>
+            <span className="text-xs text-gray-500">{getMonthName(selectedMonth)}</span>
           </div>
 
           {loadingStats || loadingAlerts || loadingDowntimeIncidents ? (
