@@ -46,11 +46,6 @@ export function Sidebar() {
       icon: <ShopfloorsIcon className="w-6 h-6" />,
     },
     {
-      name: 'Machines & Nodes',
-      href: '/machines-nodes',
-      icon: <ShopfloorsIcon className="w-6 h-6" />,
-    },
-    {
       name: 'Notifications',
       href: '/alarm-events',
       icon: <NotificationIcon className="w-6 h-6" />,

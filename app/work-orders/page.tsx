@@ -136,11 +136,17 @@ export default function WorkOrdersPage() {
     });
   };
 
-  // Group work orders by date
+  // Group work orders by date (use weekOf if available, otherwise createdAt)
   const workOrdersByDate = useMemo(() => {
     const grouped: Record<string, WorkOrder[]> = {};
     workOrders.forEach(order => {
-      const date = new Date(order.createdAt);
+      // Use weekOf date if available, otherwise use createdAt
+      let date: Date;
+      if (order.weekOf) {
+        date = new Date(order.weekOf);
+      } else {
+        date = new Date(order.createdAt);
+      }
       const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];

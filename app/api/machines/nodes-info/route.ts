@@ -70,51 +70,6 @@ export async function GET(request: NextRequest) {
       ]
     }).toArray();
 
-    // Get all unique MAC addresses from connections
-    const allMacs = [...new Set(connections.map(c => c.mac).filter(Boolean))];
-    
-    // Query nodes collection to get sensor information for each MAC
-    const nodesCollection = db.collection('nodes');
-    const nodes = allMacs.length > 0 ? await nodesCollection.find({
-      mac: { $in: allMacs }
-    }).toArray() : [];
-    
-    // Helper function to determine sensor type from node document
-    const getSensorTypeFromNode = (node: any): string | null => {
-      if (!node) return null;
-      
-      // Check which sensors are active
-      const activeSensors: string[] = [];
-      
-      if (node.ct && node.ct.status === true) {
-        activeSensors.push('Current');
-      }
-      if (node.vibration && node.vibration.status === true) {
-        activeSensors.push('Vibration');
-      }
-      if (node.ambient && node.ambient.status === true) {
-        activeSensors.push('Ambient Temperature & Humidity');
-      }
-      if (node.thermistor && node.thermistor.status === true) {
-        activeSensors.push('Temperature');
-      }
-      
-      // Return the first active sensor, or null if none
-      return activeSensors.length > 0 ? activeSensors[0] : null;
-    };
-    
-    // Create a map of MAC -> node info from nodes collection
-    const nodesByMac = new Map<string, any>();
-    nodes.forEach(node => {
-      if (node.mac) {
-        nodesByMac.set(node.mac, {
-          sensorType: getSensorTypeFromNode(node),
-          // Node type can be inferred from sensor type or stored separately
-          nodeType: node.nodeType || null,
-        });
-      }
-    });
-
     // Get lab information
     const labIds = [...new Set(machines.map(m => m.labId?.toString()).filter(Boolean))];
     const labObjectIds = labIds.map(id => {
@@ -151,27 +106,20 @@ export async function GET(request: NextRequest) {
       const macMap = connectionsByMachine.get(machineId)!;
       const mac = conn.mac;
       
-      // Get node info from nodes collection if available
-      const nodeInfo = nodesByMac.get(mac) || {};
-      
       if (!macMap.has(mac)) {
         macMap.set(mac, {
           mac: mac,
-          // Prefer connection data, fallback to nodes collection data
-          nodeType: conn.nodeType || nodeInfo.nodeType || null,
-          sensorType: conn.sensorType || nodeInfo.sensorType || null,
+          nodeType: conn.nodeType || null,
+          sensorType: conn.sensorType || null,
         });
       } else {
         // Prefer the one with more complete info
         const existing = macMap.get(mac)!;
-        const newNodeType = conn.nodeType || nodeInfo.nodeType || existing.nodeType;
-        const newSensorType = conn.sensorType || nodeInfo.sensorType || existing.sensorType;
-        
-        if ((!existing.nodeType && newNodeType) || (!existing.sensorType && newSensorType)) {
+        if ((!existing.nodeType && conn.nodeType) || (!existing.sensorType && conn.sensorType)) {
           macMap.set(mac, {
             mac: mac,
-            nodeType: newNodeType || existing.nodeType || null,
-            sensorType: newSensorType || existing.sensorType || null,
+            nodeType: conn.nodeType || existing.nodeType || null,
+            sensorType: conn.sensorType || existing.sensorType || null,
           });
         }
       }
@@ -181,30 +129,6 @@ export async function GET(request: NextRequest) {
     const machinesWithNodes = machines.map(machine => {
       const machineId = machine._id.toString();
       const macMap = connectionsByMachine.get(machineId) || new Map();
-      
-      // Also check if machine has nodes array directly (for backward compatibility)
-      if (machine.nodes && Array.isArray(machine.nodes)) {
-        machine.nodes.forEach((node: any) => {
-          if (node.mac && !macMap.has(node.mac)) {
-            macMap.set(node.mac, {
-              mac: node.mac,
-              nodeType: node.nodeType || null,
-              sensorType: node.sensorType || null,
-            });
-          } else if (node.mac && macMap.has(node.mac)) {
-            // Merge data if node exists but has more complete info
-            const existing = macMap.get(node.mac)!;
-            if ((!existing.nodeType && node.nodeType) || (!existing.sensorType && node.sensorType)) {
-              macMap.set(node.mac, {
-                mac: node.mac,
-                nodeType: node.nodeType || existing.nodeType || null,
-                sensorType: node.sensorType || existing.sensorType || null,
-              });
-            }
-          }
-        });
-      }
-      
       const nodes = Array.from(macMap.values());
 
       return {

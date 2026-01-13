@@ -117,10 +117,10 @@ export default function MachinesNodesPage() {
 
   const getSensorTypeColor = (sensorType: string | null) => {
     if (!sensorType) return 'text-gray-500';
-    if (sensorType.includes('Vibration')) return 'text-yellow-400 bg-yellow-400/20';
-    if (sensorType.includes('Current')) return 'text-blue-400 bg-blue-400/20';
-    if (sensorType.includes('Temperature')) return 'text-red-400 bg-red-400/20';
-    return 'text-gray-400 bg-gray-400/20';
+    if (sensorType.includes('Vibration')) return 'text-yellow-400';
+    if (sensorType.includes('Current')) return 'text-blue-400';
+    if (sensorType.includes('Temperature')) return 'text-red-400';
+    return 'text-gray-400';
   };
 
   const getNodeTypeColor = (nodeType: string | null) => {
@@ -165,38 +165,28 @@ export default function MachinesNodesPage() {
 
       {/* Summary */}
       {summary && (
-        <div className="mb-6 space-y-4">
-          <div className="bg-dark-panel border border-dark-border rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Overview</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-dark-bg border border-dark-border rounded p-4">
-                <div className="text-gray-400 text-sm mb-1">Total Machines</div>
-                <div className="text-2xl font-bold text-white mt-2">{summary.totalMachines}</div>
-              </div>
-              <div className="bg-dark-bg border border-dark-border rounded p-4">
-                <div className="text-gray-400 text-sm mb-1">Total Nodes</div>
-                <div className="text-2xl font-bold text-white mt-2">{summary.totalNodes}</div>
-              </div>
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-dark-panel border border-dark-border rounded-lg p-4">
+            <div className="text-gray-400 text-sm mb-1">Total Machines</div>
+            <div className="text-2xl font-bold text-white">{summary.totalMachines}</div>
+          </div>
+          <div className="bg-dark-panel border border-dark-border rounded-lg p-4">
+            <div className="text-gray-400 text-sm mb-1">Total Nodes</div>
+            <div className="text-2xl font-bold text-white">{summary.totalNodes}</div>
+          </div>
+          <div className="bg-dark-panel border border-dark-border rounded-lg p-4">
+            <div className="text-gray-400 text-sm mb-1">Sensor Types</div>
+            <div className="text-lg font-semibold text-white">
+              {Object.keys(summary.sensorTypes).length} types
+            </div>
+
+          </div>
+          <div className="bg-dark-panel border border-dark-border rounded-lg p-4">
+            <div className="text-gray-400 text-sm mb-1">Node Types</div>
+            <div className="text-lg font-semibold text-white">
+              {Object.keys(summary.nodeTypes).length} types
             </div>
           </div>
-          
-          {/* Sensor Types Breakdown */}
-          {Object.keys(summary.sensorTypes).length > 0 && (
-            <div className="bg-dark-panel border border-dark-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Sensor Types Breakdown</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {Object.entries(summary.sensorTypes).map(([type, count]) => (
-                  <div key={type} className="bg-dark-bg border border-dark-border rounded p-4">
-                    <div className={`text-sm font-medium mb-1 px-2 py-1 rounded inline-block ${getSensorTypeColor(type)}`}>
-                      {type}
-                    </div>
-                    <div className="text-2xl font-bold text-white mt-2">{count}</div>
-                    <div className="text-xs text-gray-500 mt-1">nodes</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -207,6 +197,7 @@ export default function MachinesNodesPage() {
             <thead className="bg-dark-bg border-b border-dark-border">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Machine</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Lab</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nodes</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Node Details</th>
@@ -215,7 +206,7 @@ export default function MachinesNodesPage() {
             <tbody className="divide-y divide-dark-border">
               {machines.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
                     {loading ? 'Loading...' : 'No machines found'}
                   </td>
                 </tr>
@@ -224,12 +215,12 @@ export default function MachinesNodesPage() {
                   <tr key={machine.machineId} className="hover:bg-dark-bg/50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-white">{machine.machineName}</div>
-                      {machine.description && machine.description.trim() && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {machine.description.split(' ').slice(0, 5).join(' ')}
-                          {machine.description.split(' ').length > 5 ? '...' : ''}
-                        </div>
+                      {machine.description && (
+                        <div className="text-xs text-gray-500 mt-1">{machine.description}</div>
                       )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-300">{machine.labName}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded ${
@@ -255,7 +246,7 @@ export default function MachinesNodesPage() {
                                 </span>
                               )}
                               {node.sensorType && (
-                                <span className={`px-2 py-0.5 rounded font-medium ${getSensorTypeColor(node.sensorType)}`}>
+                                <span className={`px-2 py-0.5 rounded ${getSensorTypeColor(node.sensorType)}`}>
                                   {node.sensorType}
                                 </span>
                               )}
@@ -273,6 +264,24 @@ export default function MachinesNodesPage() {
           </table>
         </div>
       </div>
+
+      {/* Sensor Types Breakdown */}
+      {summary && Object.keys(summary.sensorTypes).length > 0 && (
+        <div className="mt-6 bg-dark-panel border border-dark-border rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Sensor Types Breakdown</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {Object.entries(summary.sensorTypes).map(([type, count]) => (
+              <div key={type} className="bg-dark-bg border border-dark-border rounded p-4">
+                <div className={`text-sm font-medium mb-1 ${getSensorTypeColor(type)}`}>
+                  {type}
+                </div>
+                <div className="text-2xl font-bold text-white">{count}</div>
+                <div className="text-xs text-gray-500 mt-1">nodes</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

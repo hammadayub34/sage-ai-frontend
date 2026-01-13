@@ -254,6 +254,38 @@ export async function getLabs(): Promise<Lab[]> {
 }
 
 /**
+ * Get a single lab by ID
+ */
+export async function getLabById(labId: string): Promise<Lab | null> {
+  const db = await connectToDatabase();
+  const collection = db.collection<Lab>('labs');
+  const { ObjectId } = await import('mongodb');
+  
+  let labObjectId: any;
+  try {
+    labObjectId = new ObjectId(labId);
+  } catch {
+    labObjectId = null;
+  }
+  
+  const lab = await collection.findOne({
+    $or: [
+      { _id: labId },
+      ...(labObjectId ? [{ _id: labObjectId }] : [])
+    ]
+  });
+  
+  if (!lab) {
+    return null;
+  }
+  
+  return {
+    ...lab,
+    _id: lab._id.toString(),
+  };
+}
+
+/**
  * Get labs for a specific user (labs where user is in user_id array)
  */
 export async function getLabsForUser(userId: string): Promise<Lab[]> {
