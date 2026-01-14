@@ -1004,7 +1004,7 @@ export default function WorkOrdersPage() {
                         <span
                           className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(order.status)}`}
                         >
-                          {order.status.charAt(0).toUpperCase() + order.status.slice(1).toLowerCase()}
+                          {order.status ? (order.status.charAt(0).toUpperCase() + order.status.slice(1).toLowerCase()) : 'Unknown'}
                         </span>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-gray-400">
@@ -1027,7 +1027,21 @@ export default function WorkOrdersPage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right text-sm text-gray-400">
                         <div>
-                          {new Date(order.createdAt).toLocaleDateString()} {new Date(order.createdAt).toLocaleTimeString()}
+                          {order.createdAt ? (
+                            <>
+                              {new Date(order.createdAt).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                              })} {new Date(order.createdAt).toLocaleTimeString('en-US', { 
+                                hour: '2-digit', 
+                                minute: '2-digit',
+                                hour12: true 
+                              })}
+                            </>
+                          ) : (
+                            'Date not available'
+                          )}
                         </div>
                         {order.weekOf && (
                           <div className="mt-1">Week of: {order.weekOf}</div>

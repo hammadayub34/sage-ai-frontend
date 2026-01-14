@@ -492,13 +492,13 @@ export default function AIInsightsPage() {
       console.log('[AI Insights] Labs data:', data);
       if (data.labs && data.labs.length > 0) {
         setLabs(data.labs);
-        // Auto-select JoyLand Park Lahore lab if available, otherwise first lab
-        const joylandLab = data.labs.find((lab: Lab) => {
+        // Auto-select Maheen Textiles lab if available, otherwise first lab
+        const maheenLab = data.labs.find((lab: Lab) => {
           const labName = lab.name?.toLowerCase() || '';
-          return labName.includes('joyland') && labName.includes('lahore');
+          return labName.includes('maheen') || labName.includes('textiles');
         });
-        console.log('[AI Insights] JoyLand Park Lahore lab found:', joylandLab);
-        const labToSelect = joylandLab || data.labs[0];
+        console.log('[AI Insights] Maheen Textiles lab found:', maheenLab);
+        const labToSelect = maheenLab || data.labs[0];
         console.log('[AI Insights] Selected lab:', labToSelect?.name, 'ID:', labToSelect?._id);
         if (labToSelect && labToSelect._id) {
           setSelectedLabId(labToSelect._id);
@@ -1322,7 +1322,10 @@ export default function AIInsightsPage() {
             <div className="px-6 pb-4 border-t border-dark-border">
               {loadingWiseAnalysis || (!wiseAnalysis && selectedLabId) ? (
                 <div className="py-6 flex items-center justify-center">
-                  <div className="text-gray-400 animate-pulse">Wise Guy gathering performance insights...</div>
+                  <div className="flex items-center gap-2 text-sage-400 animate-pulse">
+                    <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="font-medium">Gathering insights...</span>
+                  </div>
                 </div>
               ) : wiseAnalysis ? (
                 <div className="pt-4">

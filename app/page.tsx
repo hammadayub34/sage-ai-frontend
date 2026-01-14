@@ -163,12 +163,12 @@ export default function Dashboard() {
 
       if (data.success) {
         setLabs(data.labs || []);
-        // Auto-select Dawlance lab if available, otherwise first lab
+        // Auto-select Maheen Textiles lab if available, otherwise first lab
         if (data.labs && data.labs.length > 0) {
-          const dawlanceLab = data.labs.find((lab: Lab) => 
-            lab.name.toLowerCase().includes('dawlance')
+          const maheenLab = data.labs.find((lab: Lab) => 
+            lab.name.toLowerCase().includes('maheen') || lab.name.toLowerCase().includes('textiles')
           );
-          const labToSelect = dawlanceLab || data.labs[0];
+          const labToSelect = maheenLab || data.labs[0];
           setSelectedLabId(labToSelect._id);
           fetchMachinesForLab(labToSelect._id);
         } else {
@@ -343,6 +343,58 @@ export default function Dashboard() {
     enabled: !!selectedMachineId,
   });
 
+  // Fetch vibration data to check availability and which axes have data
+  const { data: vibrationDataOverall, isLoading: isLoadingVibration } = useQuery({
+    queryKey: ['vibration', selectedMachineId, `-${selectedTimeRange}`, 'raw', 'vibration'],
+    queryFn: async () => {
+      if (!selectedMachineId || isCNCMachineA) return null;
+      try {
+        const response = await fetch(`/api/influxdb/vibration?machineId=${selectedMachineId}&timeRange=-${selectedTimeRange}&windowPeriod=raw&axis=vibration`);
+        if (!response.ok) return null;
+        const result = await response.json();
+        return result.data || [];
+      } catch (error) {
+        return null;
+      }
+    },
+    enabled: !!selectedMachineId && !isCNCMachineA && chartTab === 'vibration',
+  });
+
+  // Check if vibration data exists and get basic info
+  const vibrationInfo = useMemo(() => {
+    // If not on vibration tab or it's a CNC machine, no vibration data
+    if (isCNCMachineA || chartTab !== 'vibration') {
+      return { hasData: false, dataPoints: 0, axes: [], timeRange: null };
+    }
+    
+    // If still loading, we don't know yet
+    if (isLoadingVibration) {
+      return { hasData: false, dataPoints: 0, axes: [], timeRange: selectedTimeRange };
+    }
+    
+    // Check if we have data
+    if (!vibrationDataOverall || !Array.isArray(vibrationDataOverall) || vibrationDataOverall.length === 0) {
+      return { hasData: false, dataPoints: 0, axes: [], timeRange: selectedTimeRange };
+    }
+    
+    try {
+      const hasData = vibrationDataOverall.some((d: any) => d && d.value > 0);
+      const dataPoints = vibrationDataOverall.length;
+      
+      // Common axes that are typically available when vibration data exists
+      const commonAxes = ['vibration', 'x_vibration', 'y_vibration', 'x_acc', 'y_acc', 'z_acc'];
+      
+      return {
+        hasData,
+        dataPoints,
+        axes: hasData ? commonAxes : [],
+        timeRange: selectedTimeRange,
+      };
+    } catch (error) {
+      return { hasData: false, dataPoints: 0, axes: [], timeRange: selectedTimeRange };
+    }
+  }, [vibrationDataOverall, isLoadingVibration, isCNCMachineA, chartTab, selectedTimeRange]);
+
   // Fetch monitoring analysis
   const fetchMonitoringAnalysis = async () => {
     if (!selectedMachineId || !downtimeData) {
@@ -360,6 +412,14 @@ export default function Dashboard() {
     try {
       const alertsCount = alarmHistoryData ? Object.values(alarmHistoryData).reduce((sum: number, count) => sum + (count as number), 0) : 0;
       const workOrdersCount = workOrders.length;
+      
+      // Get alarm breakdown
+      const alarmBreakdown = alarmHistoryData ? Object.entries(alarmHistoryData)
+        .filter(([_, count]) => (count as number) > 0)
+        .map(([alarmType, count]) => ({ type: alarmType, count: count as number }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5) // Top 5 alarms
+        : [];
 
       const formatTimeRange = (range: string): string => {
         const match = range.match(/-(\d+)([hdms])/);
@@ -374,10 +434,35 @@ export default function Dashboard() {
         return range;
       };
 
+      const selectedLab = labs.find(lab => lab._id === selectedLabId);
+
+      // Check if vibration data is available
+      const hasVibrationData = !isCNCMachineA && chartTab === 'vibration' && vibrationInfo?.hasData;
+      const vibrationDataPoints = vibrationInfo?.dataPoints || 0;
+      const vibrationAxesAvailable = vibrationInfo?.axes || [];
+      const vibrationTimeRange = vibrationInfo?.timeRange || null;
+      
+      // Format time range for display (for vibration chart, it uses different ranges)
+      const formatVibrationTimeRange = (range: string | null): string => {
+        if (!range) return '';
+        // Vibration chart uses: 5m, 30m, 1h, 24h
+        // Main page uses: 24h, 7d, 30d
+        // We'll use the main page range for consistency
+        const rangeMap: Record<string, string> = {
+          '24h': '24 hours',
+          '7d': '7 days',
+          '30d': '30 days',
+          '5m': '5 minutes',
+          '30m': '30 minutes',
+          '1h': '1 hour',
+        };
+        return rangeMap[range] || range;
+      };
+
       const requestBody = {
         machineName: machine.machineName,
         machineId: selectedMachineId,
-        labName: labs.find(lab => lab._id === selectedLabId)?.name || 'Unknown Lab',
+        labName: selectedLab?.name || 'Unknown Lab',
         downtimePercentage: downtimeData.downtimePercentage || 0,
         uptimePercentage: downtimeData.uptimePercentage || 0,
         totalDowntime: downtimeData.totalDowntime || 0,
@@ -385,7 +470,15 @@ export default function Dashboard() {
         incidentCount: downtimeData.incidentCount || 0,
         timeRange: formatTimeRange(`-${selectedTimeRange}`),
         alertsCount,
+        alarmBreakdown,
         workOrdersCount,
+        workOrdersPending: workOrders.filter(wo => wo.status.toLowerCase() === 'pending').length,
+        workOrdersCompleted: workOrders.filter(wo => wo.status.toLowerCase() === 'completed').length,
+        hasVibrationData,
+        vibrationDataPoints,
+        vibrationAxesAvailable,
+        vibrationTimeRange: vibrationTimeRange ? formatVibrationTimeRange(vibrationTimeRange) : null,
+        chartType: isCNCMachineA ? chartTab : (chartTab === 'vibration' ? 'vibration' : 'current'),
       };
 
       const response = await fetch('/api/monitoring/analysis', {
@@ -437,13 +530,18 @@ export default function Dashboard() {
     }
   };
 
+  // Clear analysis when lab, machine, or time range changes
+  useEffect(() => {
+    setMonitoringAnalysis(null);
+  }, [selectedLabId, selectedMachineId, selectedTimeRange]);
+
   // Auto-fetch analysis when machine and data are available
   useEffect(() => {
-    if (selectedMachineId && downtimeData && !monitoringAnalysis && !loadingMonitoringAnalysis) {
+    if (selectedMachineId && selectedLabId && downtimeData && !loadingMonitoringAnalysis) {
       fetchMonitoringAnalysis();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMachineId, downtimeData, machines]);
+  }, [selectedMachineId, selectedLabId, selectedTimeRange, downtimeData, alarmHistoryData, workOrders, vibrationDataOverall, chartTab]);
   
   const handleRefresh = () => {
     // Invalidate all queries to force refresh
@@ -703,12 +801,53 @@ export default function Dashboard() {
             </div>
 
             {loadingMonitoringAnalysis ? (
-              <div className="text-gray-400">Loading...</div>
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-2 text-sage-400 animate-pulse">
+                  <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="font-medium">Gathering insights...</span>
+                </div>
+              </div>
             ) : monitoringAnalysis ? (
-              <div className="space-y-3">
-                <div className="p-3 bg-dark-bg/50 rounded border border-dark-border">
-                  <div className="text-dark-text whitespace-pre-wrap leading-relaxed">
-                    {monitoringAnalysis}
+              <div className="pt-4">
+                <div className="prose prose-invert max-w-none">
+                  <div className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                    {monitoringAnalysis.split('\n').map((line, index, array) => {
+                      // Remove markdown formatting
+                      let cleanLine = line.trim();
+                      
+                      // Remove markdown headings (###, ##, #)
+                      cleanLine = cleanLine.replace(/^#{1,6}\s+/, '');
+                      
+                      // Remove bold markers (**text**)
+                      cleanLine = cleanLine.replace(/\*\*/g, '');
+                      
+                      // Check if previous line was empty or a heading
+                      const prevLine = index > 0 ? array[index - 1].trim() : '';
+                      const isFirstHeading = index === 0 || (prevLine === '' && index > 0);
+                      
+                      // Skip empty lines
+                      if (!cleanLine) {
+                        return <br key={index} />;
+                      }
+                      
+                      // Format headings (lines that were markdown headings or bold text)
+                      if (line.trim().match(/^#{1,6}\s+/) || (line.trim().startsWith('**') && line.trim().endsWith('**'))) {
+                        // Reduce top margin for first heading or headings after empty lines
+                        const topMargin = isFirstHeading ? 'mt-2' : 'mt-4';
+                        return (
+                          <h3 key={index} className={`${topMargin} mb-2 text-white font-semibold text-base`}>
+                            {cleanLine}
+                          </h3>
+                        );
+                      }
+                      
+                      // Regular paragraph
+                      return (
+                        <p key={index} className="mb-3 last:mb-0">
+                          {cleanLine}
+                        </p>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -774,7 +913,7 @@ export default function Dashboard() {
                               <span
                                 className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(order.status)}`}
                               >
-                                {order.status.charAt(0).toUpperCase() + order.status.slice(1).toLowerCase()}
+                                {order.status ? (order.status.charAt(0).toUpperCase() + order.status.slice(1).toLowerCase()) : 'Unknown'}
                               </span>
                             </div>
                             <div className="flex items-center gap-4 text-sm text-gray-400">
@@ -798,7 +937,21 @@ export default function Dashboard() {
                           </div>
                           <div className="text-right text-sm text-gray-400">
                             <div>
-                              {new Date(order.createdAt).toLocaleDateString()} {new Date(order.createdAt).toLocaleTimeString()}
+                              {order.createdAt ? (
+                                <>
+                                  {new Date(order.createdAt).toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                  })} {new Date(order.createdAt).toLocaleTimeString('en-US', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit',
+                                    hour12: true 
+                                  })}
+                                </>
+                              ) : (
+                                'Date not available'
+                              )}
                             </div>
                             {order.weekOf && (
                               <div className="mt-1">Week of: {order.weekOf}</div>
