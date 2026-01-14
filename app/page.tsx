@@ -6,10 +6,10 @@ import { AlarmHistory } from '@/components/AlarmHistory';
 import { AlarmEvents } from '@/components/AlarmEvents';
 import { DowntimeStats } from '@/components/DowntimeStats';
 import { WorkOrderForm } from '@/components/WorkOrderForm';
-import { RefreshIcon, SignalIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, CheckIcon } from '@/components/Icons';
+import { RefreshIcon, SignalIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, CheckIcon, AIIcon } from '@/components/Icons';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { VibrationChart } from '@/components/VibrationChart';
 import { ModbusChart } from '@/components/ModbusChart';
 import { toast } from 'react-toastify';
@@ -82,6 +82,17 @@ export default function Dashboard() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [workOrderFormOpen, setWorkOrderFormOpen] = useState(false);
+  const [chartTab, setChartTab] = useState<'vibration' | 'pressure' | 'density' | 'flow' | 'temperature' | 'current'>('vibration');
+  const [selectedTimeRange, setSelectedTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [monitoringAnalysis, setMonitoringAnalysis] = useState<string | null>(null);
+  const [loadingMonitoringAnalysis, setLoadingMonitoringAnalysis] = useState(false);
+  const [monitoringAnalysisExpanded, setMonitoringAnalysisExpanded] = useState(true);
+  const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   
   // Check if selected machine is CNC Machine A (has Modbus data)
   const isCNCMachineA = selectedMachine?.machineName === 'CNC Machine A' || selectedMachine?._id === '6958155ea4f09743147b22ab';
@@ -301,15 +312,138 @@ export default function Dashboard() {
     }
   };
 
-  const [workOrderFormOpen, setWorkOrderFormOpen] = useState(false);
-  const [chartTab, setChartTab] = useState<'vibration' | 'pressure' | 'density' | 'flow' | 'temperature' | 'current'>('vibration');
-  const [selectedTimeRange, setSelectedTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
-  const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
   const queryClient = useQueryClient();
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+
+  // Fetch downtime stats for analysis
+  const { data: downtimeData } = useQuery({
+    queryKey: ['downtime', selectedMachineId, selectedTimeRange],
+    queryFn: async () => {
+      if (!selectedMachineId) return null;
+      const response = await fetch(`/api/influxdb/downtime?machineId=${selectedMachineId}&timeRange=-${selectedTimeRange}`);
+      if (!response.ok) return null;
+      const result = await response.json();
+      return result.data;
+    },
+    enabled: !!selectedMachineId,
+  });
+
+  // Fetch alarm history for analysis
+  const { data: alarmHistoryData } = useQuery({
+    queryKey: ['alarm-history', selectedMachineId, '-24h'],
+    queryFn: async () => {
+      if (!selectedMachineId) return {};
+      try {
+        const { queryAlarmHistory } = await import('@/lib/influxdb');
+        return await queryAlarmHistory(selectedMachineId, '-24h');
+      } catch (error) {
+        console.error('Error fetching alarm history:', error);
+        return {};
+      }
+    },
+    enabled: !!selectedMachineId,
+  });
+
+  // Fetch monitoring analysis
+  const fetchMonitoringAnalysis = async () => {
+    if (!selectedMachineId || !downtimeData) {
+      return;
+    }
+    
+    const machine = selectedMachine || machines.find(m => m._id === selectedMachineId);
+    if (!machine) {
+      return;
+    }
+
+    setLoadingMonitoringAnalysis(true);
+    setMonitoringAnalysis(null);
+
+    try {
+      const alertsCount = alarmHistoryData ? Object.values(alarmHistoryData).reduce((sum: number, count) => sum + (count as number), 0) : 0;
+      const workOrdersCount = workOrders.length;
+
+      const formatTimeRange = (range: string): string => {
+        const match = range.match(/-(\d+)([hdms])/);
+        if (!match) return range;
+        const value = parseInt(match[1]);
+        const unit = match[2];
+        if (unit === 'h') {
+          return value === 1 ? 'Last hour' : `Last ${value} hours`;
+        } else if (unit === 'd') {
+          return value === 1 ? 'Last 24 hours' : `Last ${value} days`;
+        }
+        return range;
+      };
+
+      const requestBody = {
+        machineName: machine.machineName,
+        machineId: selectedMachineId,
+        labName: labs.find(lab => lab._id === selectedLabId)?.name || 'Unknown Lab',
+        downtimePercentage: downtimeData.downtimePercentage || 0,
+        uptimePercentage: downtimeData.uptimePercentage || 0,
+        totalDowntime: downtimeData.totalDowntime || 0,
+        totalUptime: downtimeData.totalUptime || 0,
+        incidentCount: downtimeData.incidentCount || 0,
+        timeRange: formatTimeRange(`-${selectedTimeRange}`),
+        alertsCount,
+        workOrdersCount,
+      };
+
+      const response = await fetch('/api/monitoring/analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analysis');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let analysisText = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'chunk') {
+                analysisText += data.content;
+                setMonitoringAnalysis(analysisText);
+              } else if (data.type === 'done') {
+                break;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching monitoring analysis:', error);
+      toast.error('Failed to load analysis');
+      setMonitoringAnalysis(null);
+    } finally {
+      setLoadingMonitoringAnalysis(false);
+    }
+  };
+
+  // Auto-fetch analysis when machine and data are available
+  useEffect(() => {
+    if (selectedMachineId && downtimeData && !monitoringAnalysis && !loadingMonitoringAnalysis) {
+      fetchMonitoringAnalysis();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMachineId, downtimeData, machines]);
   
   const handleRefresh = () => {
     // Invalidate all queries to force refresh
@@ -552,6 +686,40 @@ export default function Dashboard() {
       {selectedMachineId && (
         <div className="mb-6">
           <DowntimeStats machineId={selectedMachineId} timeRange={`-${selectedTimeRange}`} />
+        </div>
+      )}
+
+      {/* AI Analysis Section */}
+      {selectedMachineId && (
+        <div className="mb-6">
+          <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
+            <div className="flex items-center gap-2 mb-4">
+              <div>
+                <h3 className="heading-inter heading-inter-sm flex items-center gap-2">
+                  <AIIcon className="w-5 h-5 text-sage-400" />
+                  AI Analysis
+                </h3>
+              </div>
+            </div>
+
+            {loadingMonitoringAnalysis ? (
+              <div className="text-gray-400">Loading...</div>
+            ) : monitoringAnalysis ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-dark-bg/50 rounded border border-dark-border">
+                  <div className="text-dark-text whitespace-pre-wrap leading-relaxed">
+                    {monitoringAnalysis}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-sage-500/10 border border-sage-500/30 rounded text-center">
+                <span className="text-sage-400 text-sm">
+                  No analysis available
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
