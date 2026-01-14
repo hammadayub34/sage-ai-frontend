@@ -1,0 +1,311 @@
+/**
+ * SVG Icon Components - Clean, modern icons to replace emojis
+ */
+
+interface IconProps {
+  className?: string;
+  size?: number;
+}
+
+export const DashboardIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/>
+  </svg>
+);
+
+export const ChatIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="currentColor"/>
+  </svg>
+);
+
+export const SettingsIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ChartIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/>
+  </svg>
+);
+
+export const TrendingUpIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z" fill="currentColor"/>
+  </svg>
+);
+
+export const LockIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" fill="currentColor"/>
+  </svg>
+);
+
+export const WrenchIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/>
+  </svg>
+);
+
+export const DropletIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="currentColor"/>
+  </svg>
+);
+
+export const CalendarIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z" fill="currentColor"/>
+  </svg>
+);
+
+export const PlayIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 5v14l11-7z" fill="currentColor"/>
+  </svg>
+);
+
+export const StopIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 6h12v12H6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ClockIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" fill="currentColor"/>
+  </svg>
+);
+
+export const CheckIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/>
+  </svg>
+);
+
+export const AlertIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/>
+  </svg>
+);
+
+export const WarningIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/>
+  </svg>
+);
+
+export const FileIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
+  </svg>
+);
+
+export const ChevronDownIcon = ({ className = "w-3 h-3", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+  </svg>
+);
+
+export const ChevronRightIcon = ({ className = "w-3 h-3", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ChevronLeftIcon = ({ className = "w-3 h-3", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 18l-6-6 6-6 1.41 1.41L10.83 12l4.58 4.59L14 18z" fill="currentColor"/>
+  </svg>
+);
+
+export const RefreshIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+  </svg>
+);
+
+export const SearchIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/>
+  </svg>
+);
+
+export const SendIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+  </svg>
+);
+
+export const CloseIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+  </svg>
+);
+
+export const SparkleIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2l2.4 7.2L22 9.6l-6 5.8 1.4 8.2L12 19.8l-5.4 3.8L8 15.4l-6-5.8 7.6-.4L12 2z" fill="currentColor"/>
+  </svg>
+);
+
+export const AIIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Main AI chip/circuit symbol */}
+    <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" opacity="0.2"/>
+    <rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+    {/* Circuit nodes */}
+    <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+    <circle cx="15" cy="9" r="1.5" fill="currentColor"/>
+    <circle cx="9" cy="15" r="1.5" fill="currentColor"/>
+    <circle cx="15" cy="15" r="1.5" fill="currentColor"/>
+    <circle cx="12" cy="12" r="2" fill="currentColor" opacity="0.6"/>
+    {/* Connecting lines */}
+    <path d="M9 9h3M15 9h-3M9 15h3M15 15h-3M12 9v3M12 12v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    {/* Sparkle effects around */}
+    <circle cx="4" cy="4" r="0.8" fill="currentColor" opacity="0.8"/>
+    <circle cx="20" cy="4" r="0.8" fill="currentColor" opacity="0.8"/>
+    <circle cx="4" cy="20" r="0.8" fill="currentColor" opacity="0.8"/>
+    <circle cx="20" cy="20" r="0.8" fill="currentColor" opacity="0.8"/>
+    <path d="M2 12h2M20 12h2M12 2v2M12 20v2" stroke="currentColor" strokeWidth="1" opacity="0.6"/>
+  </svg>
+);
+
+export const TrashIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
+  </svg>
+);
+
+export const NotificationIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" fill="currentColor"/>
+  </svg>
+);
+
+export const AlarmEventsIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Activity log / event list icon */}
+    <path d="M3 3h18v2H3V3zm0 4h18v2H3V7zm0 4h12v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z" fill="currentColor" opacity="0.6"/>
+    {/* Alert indicators on the right */}
+    <circle cx="19" cy="5" r="2" fill="currentColor" opacity="0.9"/>
+    <circle cx="19" cy="9" r="2" fill="currentColor" opacity="0.9"/>
+    <path d="M17 11h4v2h-4v-2zm0 4h4v2h-4v-2z" fill="currentColor" opacity="0.6"/>
+  </svg>
+);
+
+export const WorkflowIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Nodes */}
+    <rect x="3" y="3" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    <rect x="13" y="3" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    <rect x="3" y="13" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    <rect x="13" y="13" width="6" height="6" rx="1" fill="currentColor" opacity="0.8"/>
+    {/* Edges/Connections */}
+    <path d="M9 6L13 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M9 16L13 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M6 9L6 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M16 9L16 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+
+export const SaveIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor"/>
+  </svg>
+);
+
+export const ClearIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+  </svg>
+);
+
+export const LoadIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
+  </svg>
+);
+
+export const ShopfloorsIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Factory/warehouse building with multiple floors */}
+    <path d="M3 21h18v-2H3v2z" fill="currentColor" opacity="0.6"/>
+    <path d="M3 19V7h18v12H3z" fill="currentColor" opacity="0.3"/>
+    {/* Floor dividers */}
+    <path d="M3 13h18v-1H3v1z" fill="currentColor" opacity="0.4"/>
+    <path d="M3 10h18v-1H3v1z" fill="currentColor" opacity="0.4"/>
+    {/* Windows/panels on each floor */}
+    <rect x="5" y="8" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="10" y="8" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="15" y="8" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="5" y="11" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="10" y="11" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="15" y="11" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="5" y="14" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="10" y="14" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    <rect x="15" y="14" width="3" height="2" rx="0.5" fill="currentColor" opacity="0.7"/>
+    {/* Entrance/door */}
+    <rect x="10" y="17" width="4" height="4" rx="0.5" fill="currentColor" opacity="0.8"/>
+  </svg>
+);
+
+export const PlusIcon = ({ className = "w-4 h-4", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
+  </svg>
+);
+
+export const LibraryIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Books/Documents stack */}
+    <path d="M4 6h16v12H4V6z" fill="currentColor" opacity="0.2"/>
+    <path d="M4 6h16v2H4V6z" fill="currentColor" opacity="0.4"/>
+    <path d="M6 8h12v10H6V8z" fill="currentColor" opacity="0.3"/>
+    <path d="M8 10h8v8H8v-8z" fill="currentColor" opacity="0.5"/>
+    {/* Document lines */}
+    <path d="M9 12h6v1H9v-1z" fill="currentColor" opacity="0.7"/>
+    <path d="M9 14h6v1H9v-1z" fill="currentColor" opacity="0.7"/>
+    <path d="M9 16h4v1H9v-1z" fill="currentColor" opacity="0.7"/>
+    {/* Book binding/spine */}
+    <path d="M4 6h2v12H4V6z" fill="currentColor" opacity="0.6"/>
+  </svg>
+);
+
+export const SignOutIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/>
+  </svg>
+);
+
+export const ArrowUpIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ArrowDownIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" fill="currentColor"/>
+  </svg>
+);
+
+export const ArrowRightIcon = ({ className = "w-5 h-5", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z" fill="currentColor"/>
+  </svg>
+);
+
+export const SignalIcon = ({ className = "w-6 h-6", size }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} width={size} height={size} xmlns="http://www.w3.org/2000/svg">
+    {/* Center circle - larger and more prominent */}
+    <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
+    {/* Inner curved arc - expanding signal wave - thicker */}
+    <path d="M5 12a7 7 0 0 1 7-7" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round"/>
+    {/* Outer curved arc - larger expanding signal wave - thicker */}
+    <path d="M1 12a11 11 0 0 1 11-11" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round"/>
+  </svg>
+);
+

@@ -7,16 +7,18 @@ interface VibrationDataPoint {
 
 export function useVibrationData(
   machineId: string = 'lathe01',
-  timeRange: string = '-24h', // Default to 24 hours back from now
-  windowPeriod: string = '5s' // Use 5-second intervals to match raw data
+  timeRange: string = '-7d', // Default to 7 days to catch older data
+  windowPeriod: string = '5m', // Use 5-minute intervals for aggregation
+  axis: string = 'vibration' // Which axis to fetch
 ) {
   return useQuery<VibrationDataPoint[]>({
-    queryKey: ['vibration', machineId, timeRange, windowPeriod],
+    queryKey: ['vibration', machineId, timeRange, windowPeriod, axis],
     queryFn: async () => {
       const params = new URLSearchParams({
         machineId,
         timeRange,
         windowPeriod,
+        axis,
       });
 
       const response = await fetch(`/api/influxdb/vibration?${params.toString()}`);
