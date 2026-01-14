@@ -1,6 +1,6 @@
-# PLC Monitoring Frontend
+# Sage AI Frontend - Industrial Monitoring Dashboard
 
-TypeScript/React frontend for monitoring bottle filler PLC data from InfluxDB.
+TypeScript/React frontend for real-time industrial machine monitoring, AI-powered insights, and work order management.
 
 ## Tech Stack
 
@@ -10,29 +10,58 @@ TypeScript/React frontend for monitoring bottle filler PLC data from InfluxDB.
 - **Recharts** - Charting library
 - **React Query** - Data fetching and caching
 - **InfluxDB Client** - Direct connection to InfluxDB
+- **OpenAI API** - AI-powered analysis
+- **React Markdown** - Markdown rendering for AI content
 
 ## Features
 
-- Real-time status monitoring (System Running, Fault, Filling, Ready)
-- Production counters (Bottles Filled, Rejected, Per Minute)
-- Alarm panel (5 alarm types)
-- Tank status (Fill Level, Temperature, Pressure)
-- Time series charts (Production Rate, Fill Level)
-- Circular gauges (Fill Level, Temperature, Conveyor Speed)
-- Complete tags table (all 18 fields organized by category)
-- Multi-machine support (select machine ID)
+### 📊 Monitoring Dashboard (`/`)
+- **Real-time Machine Monitoring** - Live status and performance metrics
+- **Vibration Analysis** - Multi-axis vibration charts with:
+  - Time range selection (5m, 30m, 1h, 24h)
+  - Aggregated data for 24-hour views
+  - Click-and-drag zoom functionality
+  - Dynamic axis selection display
+- **Performance Metrics** - Downtime/uptime statistics with skeleton loading
+- **AI Analysis** - Automated insights based on:
+  - Machine performance metrics
+  - Alert history
+  - Work order status
+  - Vibration data availability
+- **Alert History** - 24-hour alert tracking with detailed breakdown
+- **Work Orders** - Machine-specific work order display and management
+
+### 🤖 AI Insights Dashboard (`/ai-insights`)
+- **Performance Analytics** - Comprehensive machine performance statistics
+- **Shift Utilization** - Track and analyze shift-based productivity
+- **Wise Analysis** - AI-powered insights across all machines in a lab
+- **Calendar View** - Date range selection for historical data analysis
+- **Events Tracking** - Monitor downtime incidents and alerts over time
+- **Comparative Analysis** - Month-over-month performance comparisons
+
+### 📋 Work Orders (`/work-orders`)
+- **Create Work Orders** - Comprehensive work order creation
+- **AI Auto Fill** - Intelligent form pre-filling using RAG
+- **Calendar View** - Visual work order timeline with priority-based color coding
+- **List View** - Detailed work order listing
+- **Status Management** - Track pending, in-progress, and completed orders
+
+### 🏭 Equipment Management (`/shopfloors`)
+- **Machine List** - Browse all machines across labs
+- **Last Seen Tracking** - See when each machine last reported data
+- **Lab Organization** - Organize machines by facility/lab
+- **Machine Details** - View comprehensive machine information
 
 ## Setup
 
 1. Install dependencies:
 ```bash
-cd frontend
 npm install
 ```
 
 2. Configure environment variables (optional):
 Create a `.env.local` file:
-```
+```env
 NEXT_PUBLIC_INFLUXDB_URL=http://localhost:8086
 NEXT_PUBLIC_INFLUXDB_TOKEN=my-super-secret-auth-token
 NEXT_PUBLIC_INFLUXDB_ORG=myorg
@@ -51,62 +80,153 @@ The app will be available at `http://localhost:3005`
 ```
 frontend/
 ├── app/
-│   ├── page.tsx              # Main dashboard
-│   ├── layout.tsx           # Root layout
-│   ├── providers.tsx        # React Query provider
-│   └── globals.css          # Global styles
+│   ├── page.tsx                    # Monitoring dashboard
+│   ├── ai-insights/
+│   │   └── page.tsx                # AI Insights dashboard
+│   ├── work-orders/
+│   │   └── page.tsx                # Work orders management
+│   ├── shopfloors/
+│   │   └── page.tsx                # Equipment/machines list
+│   └── api/
+│       ├── monitoring/
+│       │   └── analysis/           # AI analysis for monitoring
+│       ├── ai-insights/
+│       │   └── wise-analysis/      # AI insights generation
+│       ├── influxdb/
+│       │   ├── vibration/          # Vibration data API
+│       │   ├── downtime/           # Downtime statistics
+│       │   └── last-seen/          # Last seen timestamps
+│       └── work-order/
+│           └── autofill/           # AI auto-fill for work orders
 ├── components/
-│   ├── StatusPanel.tsx      # System status indicators
-│   ├── ProductionCounters.tsx
-│   ├── AlarmsPanel.tsx
-│   ├── TankStatus.tsx
-│   ├── TimeSeriesChart.tsx
-│   ├── GaugePanel.tsx
-│   └── TagsTable.tsx        # Complete tags table
+│   ├── VibrationChart.tsx          # Vibration visualization
+│   ├── DowntimeStats.tsx           # Performance metrics
+│   ├── AlarmHistory.tsx            # Alert history display
+│   ├── WorkOrderForm.tsx           # Work order creation form
+│   └── DateRangeCalendar.tsx       # Calendar component
 ├── hooks/
-│   └── usePLCData.ts        # React hooks for data fetching
+│   └── useVibrationData.ts         # Vibration data fetching hook
 ├── lib/
-│   ├── influxdb.ts          # InfluxDB client and queries
-│   └── react-query.ts       # React Query config
+│   ├── influxdb.ts                 # InfluxDB client
+│   ├── embeddings.ts               # Embedding generation
+│   └── pinecone.ts                 # Pinecone client
 └── types/
-    └── plc-data.ts          # TypeScript types
+    └── *.ts                        # TypeScript type definitions
 ```
 
 ## Components
 
-### StatusPanel
-Displays 4 critical status indicators with color-coded dots.
+### VibrationChart
+- Multi-axis vibration visualization
+- Time range selection (5m, 30m, 1h, 24h)
+- Aggregated data for long time ranges
+- Click-and-drag zoom functionality
+- Dynamic axis display
 
-### ProductionCounters
-Shows production metrics: Bottles Filled (large), Rejected, and Per Minute.
+### DowntimeStats
+- Performance metrics display
+- Skeleton loading states
+- Real-time downtime/uptime statistics
+- Incident tracking
 
-### AlarmsPanel
-Lists all 5 alarm types with active/inactive status and count.
+### AlarmHistory
+- 24-hour alert tracking
+- Detailed alert breakdown
+- No alert state handling
+- Real-time updates
 
-### TankStatus
-Displays tank metrics: Fill Level, Temperature, Pressure.
+### WorkOrderForm
+- Work order creation
+- AI Auto Fill integration
+- Equipment selection
+- Priority and status management
 
-### TimeSeriesChart
-Line chart for time series data (e.g., BottlesPerMinute, FillLevel).
-
-### GaugePanel
-Circular gauge visualization for analog values.
-
-### TagsTable
-Complete table of all 18 tags organized by category (Status, Counter, Alarm, Analog, Input).
+### DateRangeCalendar
+- Date range selection
+- Month navigation
+- Visual date selection
+- Integration with AI Insights
 
 ## Data Flow
 
-1. Frontend queries InfluxDB directly using `@influxdata/influxdb-client`
-2. React Query handles caching and automatic refetching (every 2 seconds)
+1. Frontend queries InfluxDB via API routes
+2. React Query handles caching and automatic refetching
 3. Components update in real-time as new data arrives
-4. All queries use Flux language to filter by machine_id
+4. AI analysis generated via OpenAI API
+5. All queries use Flux language to filter by machine_id
+
+## Key Features
+
+### AI Analysis
+- Automatically analyzes machine performance
+- Provides structured insights with sections
+- Updates dynamically based on selections
+- Includes vibration data context
+
+### Vibration Monitoring
+- Real-time multi-axis vibration tracking
+- Flexible time range selection
+- Data aggregation for performance
+- Interactive zoom functionality
+
+### Performance Metrics
+- Modern skeleton loading states
+- Real-time performance tracking
+- Time range flexibility
+- Incident analysis
+
+### Work Order Management
+- AI-powered form pre-filling
+- Calendar and list views
+- Priority-based organization
+- Machine-specific filtering
+
+## Recent Updates
+
+### January 2026
+- ✅ Added `pdf-parse` library for PDF document processing
+- ✅ AI Analysis section on monitoring page
+- ✅ Calendar feature for date range selection
+- ✅ 5-minute time range option for vibration charts
+- ✅ Skeleton loading states for Performance sections
+- ✅ Work orders display on monitoring page
+- ✅ Last seen timestamps for machines
+- ✅ Improved alert history display
+- ✅ Enhanced vibration chart with zoom and aggregation
 
 ## Notes
 
-- The frontend connects directly to InfluxDB (requires CORS configuration if needed)
-- Data refreshes automatically every 2 seconds
+- The frontend connects to backend API routes (not directly to InfluxDB)
+- Data refreshes automatically based on React Query configuration
 - Supports multiple machines via machine_id selector
-- Dark theme (black/grey) as requested
-- All 18 critical tags are displayed
+- Dark theme (black/grey) with sage green accents
+- All critical metrics are displayed with real-time updates
 
+## Development
+
+### Running in Development
+```bash
+npm run dev
+```
+
+### Building for Production
+```bash
+npm run build
+npm start
+```
+
+## Dependencies
+
+Key dependencies:
+- `next`: ^14.0.4
+- `react`: ^18.2.0
+- `@tanstack/react-query`: ^5.17.0
+- `recharts`: ^2.10.3
+- `openai`: ^6.9.1
+- `pdf-parse`: ^2.4.5 (for document processing)
+- `react-markdown`: ^10.1.0
+- `@influxdata/influxdb-client`: ^1.33.2
+
+## License
+
+Private project - All rights reserved
