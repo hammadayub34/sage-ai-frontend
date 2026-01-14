@@ -312,8 +312,11 @@ export function VibrationChart({
       </div>
 
       {isLoading ? (
-        <div className="text-center py-8">
-          <div className="text-sage-400 animate-pulse">Loading vibration data...</div>
+        <div className="flex items-center justify-center py-8">
+          <div className="flex items-center gap-2 text-sage-400 animate-pulse">
+            <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
+            <span className="font-medium">Loading vibration data...</span>
+          </div>
         </div>
       ) : error ? (
         <div className="text-red-400 text-center py-8">

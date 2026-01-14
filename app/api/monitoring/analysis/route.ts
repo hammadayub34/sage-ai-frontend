@@ -5,6 +5,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+interface AlarmBreakdown {
+  type: string;
+  count: number;
+}
+
 interface MonitoringAnalysisRequest {
   machineName: string;
   machineId: string;
@@ -16,7 +21,15 @@ interface MonitoringAnalysisRequest {
   incidentCount: number;
   timeRange: string; // e.g., "Last 7 days"
   alertsCount?: number;
+  alarmBreakdown?: AlarmBreakdown[];
   workOrdersCount?: number;
+  workOrdersPending?: number;
+  workOrdersCompleted?: number;
+  hasVibrationData?: boolean;
+  vibrationDataPoints?: number;
+  vibrationAxesAvailable?: string[];
+  vibrationTimeRange?: string | null;
+  chartType?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -46,14 +59,39 @@ export async function POST(request: NextRequest) {
     // Build additional metrics context
     let additionalMetrics = '';
     if (data.alertsCount !== undefined) {
-      additionalMetrics += `\n- Total Alerts: ${data.alertsCount}`;
+      additionalMetrics += `\n- Total Alerts (Last 24h): ${data.alertsCount}`;
+    }
+    if (data.alarmBreakdown && data.alarmBreakdown.length > 0) {
+      additionalMetrics += `\n- Top Alerts: ${data.alarmBreakdown.map(a => `${a.type} (${a.count})`).join(', ')}`;
     }
     if (data.workOrdersCount !== undefined) {
-      additionalMetrics += `\n- Work Orders: ${data.workOrdersCount}`;
+      additionalMetrics += `\n- Total Work Orders: ${data.workOrdersCount}`;
+      if (data.workOrdersPending !== undefined) {
+        additionalMetrics += ` (${data.workOrdersPending} pending, ${data.workOrdersCompleted || 0} completed)`;
+      }
+    }
+    if (data.hasVibrationData) {
+      const axisLabels: Record<string, string> = {
+        'vibration': 'Overall Vibration',
+        'x_vibration': 'X-Axis Vibration',
+        'y_vibration': 'Y-Axis Vibration',
+        'x_acc': 'X-Axis Acceleration',
+        'y_acc': 'Y-Axis Acceleration',
+        'z_acc': 'Z-Axis Acceleration',
+      };
+      const availableAxesLabels = data.vibrationAxesAvailable?.map(axis => axisLabels[axis] || axis).join(', ') || 'vibration data';
+      additionalMetrics += `\n- Vibration Data: Available (${data.vibrationDataPoints || 0} data points, monitoring: ${availableAxesLabels})`;
+    } else if (data.chartType === 'vibration') {
+      const timeRangeText = data.vibrationTimeRange ? ` in the past ${data.vibrationTimeRange}` : '';
+      additionalMetrics += `\n- Vibration Data: No vibration data points available${timeRangeText}`;
+    } else if (data.chartType && data.chartType !== 'vibration' && data.chartType !== 'current') {
+      additionalMetrics += `\n- Sensor Data: Monitoring ${data.chartType} (Modbus data)`;
     }
 
     // Create a comprehensive prompt for OpenAI
     const prompt = `You are an industrial operations analyst providing a brief analysis of a specific machine's performance data.
+
+IMPORTANT: Start your analysis by clearly stating the machine name and lab name in the first sentence. Then include the key metrics (downtime percentage, uptime percentage, incident count) naturally within your analysis.
 
 Machine Performance Data:
 - Machine Name: ${data.machineName}
@@ -66,12 +104,35 @@ Performance Metrics:
 - Uptime: ${data.uptimePercentage.toFixed(2)}% (${uptimeFormatted})
 - Downtime Incidents: ${data.incidentCount}${additionalMetrics}
 
-Please provide a concise analysis (2-4 sentences) focusing on:
-1. Overall machine health and performance status
-2. Key observations about downtime patterns or uptime efficiency
-3. Any notable concerns or positive indicators
+Please provide a structured analysis with 2-3 clear sections. Format your response as follows:
 
-Keep it brief, professional, and actionable. Format as plain text without markdown.`;
+**Performance Overview**
+Start by clearly stating: "The ${data.machineName} at ${data.labName}..." and provide a brief summary including:
+- Downtime: ${data.downtimePercentage.toFixed(2)}%
+- Uptime: ${data.uptimePercentage.toFixed(2)}%
+- Downtime Incidents: ${data.incidentCount}
+- Time Period: ${data.timeRange}
+
+**Key Observations**
+Discuss the most important findings about:
+- Downtime patterns and efficiency
+- Alert activity and patterns${data.alarmBreakdown && data.alarmBreakdown.length > 0 ? ` (mention specific alerts: ${data.alarmBreakdown.map(a => a.type).join(', ')})` : ''}
+- Work order status and maintenance activity${data.hasVibrationData ? `\n- Vibration monitoring status: ${data.vibrationAxesAvailable?.map(axis => {
+  const labels: Record<string, string> = {
+    'vibration': 'Overall Vibration',
+    'x_vibration': 'X-Axis Vibration',
+    'y_vibration': 'Y-Axis Vibration',
+    'x_acc': 'X-Axis Acceleration',
+    'y_acc': 'Y-Axis Acceleration',
+    'z_acc': 'Z-Axis Acceleration',
+  };
+  return labels[axis] || axis;
+}).join(', ') || 'vibration data'} (${data.vibrationDataPoints || 0} data points available)` : data.chartType === 'vibration' ? `\n- Vibration monitoring: No vibration data available${data.vibrationTimeRange ? ` in the past ${data.vibrationTimeRange}` : ''} - this indicates the machine may not be operational or sensors are not transmitting data` : data.chartType && data.chartType !== 'vibration' && data.chartType !== 'current' ? `\n- Sensor monitoring: ${data.chartType} data being tracked` : ''}
+
+**Recommendations**
+Provide 1-2 actionable recommendations based on the current state.
+
+Use markdown formatting with **bold** for section headers. Keep each section concise (2-3 sentences). Make sure to explicitly mention the machine name "${data.machineName}" and lab name "${data.labName}" in your response.`;
 
     // Create a streaming response
     const stream = new ReadableStream({
