@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChartIcon, CalendarIcon, ShopfloorsIcon, ChevronDownIcon, ChevronRightIcon, AlertIcon, ClockIcon, TrendingUpIcon, ArrowUpIcon, ArrowDownIcon } from '@/components/Icons';
+import { ChartIcon, CalendarIcon, ShopfloorsIcon, ChevronDownIcon, ChevronRightIcon, AlertIcon, ClockIcon, TrendingUpIcon, ArrowUpIcon, ArrowDownIcon, SignalIcon } from '@/components/Icons';
 import { toast } from 'react-toastify';
 
 interface Shift {
@@ -492,13 +492,13 @@ export default function AIInsightsPage() {
       console.log('[AI Insights] Labs data:', data);
       if (data.labs && data.labs.length > 0) {
         setLabs(data.labs);
-        // Auto-select Dawlance lab if available, otherwise first lab
-        const dawlanceLab = data.labs.find((lab: Lab) => {
+        // Auto-select JoyLand Park Lahore lab if available, otherwise first lab
+        const joylandLab = data.labs.find((lab: Lab) => {
           const labName = lab.name?.toLowerCase() || '';
-          return labName.includes('dawlance');
+          return labName.includes('joyland') && labName.includes('lahore');
         });
-        console.log('[AI Insights] Dawlance lab found:', dawlanceLab);
-        const labToSelect = dawlanceLab || data.labs[0];
+        console.log('[AI Insights] JoyLand Park Lahore lab found:', joylandLab);
+        const labToSelect = joylandLab || data.labs[0];
         console.log('[AI Insights] Selected lab:', labToSelect?.name, 'ID:', labToSelect?._id);
         if (labToSelect && labToSelect._id) {
           setSelectedLabId(labToSelect._id);
@@ -1296,7 +1296,7 @@ export default function AIInsightsPage() {
               )}
             </button>
           ))}
-        </div>
+          </div>
       )}
 
       {/* Wise Analysis Section - First */}
@@ -1409,7 +1409,7 @@ export default function AIInsightsPage() {
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
-              <ClockIcon className="w-5 h-5" />
+              <ClockIcon className="w-5 h-5 text-sage-400" />
               Performance
             </h2>
             <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
@@ -1491,7 +1491,7 @@ export default function AIInsightsPage() {
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
-              <ClockIcon className="w-5 h-5" />
+              <ChartIcon className="w-5 h-5 text-sage-400" />
               Shift Utilization - {formatShiftName(selectedShift)}
             </h2>
             <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
@@ -1664,7 +1664,7 @@ export default function AIInsightsPage() {
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5" />
+              <CalendarIcon className="w-5 h-5 text-sage-400" />
               Events
             </h2>
             <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>

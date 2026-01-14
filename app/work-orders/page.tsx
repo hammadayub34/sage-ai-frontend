@@ -242,22 +242,48 @@ export default function WorkOrdersPage() {
     const dateKey = formatDateKey(date);
     const orders = workOrdersByDate[dateKey] || [];
     return orders.map((order, idx) => {
-      // Always default to 1 PM (13:00) for all work orders since we don't have proper time data yet
-      const defaultHour = 13;
-      const defaultMinute = 0;
+      // Use the actual createdAt timestamp if available
+      let hour = 13; // Default to 1 PM
+      let minute = 0;
       
-      // Use 1 PM + small offset for multiple orders on the same day
-      let hour = defaultHour;
-      let minute = defaultMinute + (idx * 15); // Add 15 minutes per order to stack them
-      
-      // Handle minute overflow
-      if (minute >= 60) {
-        hour += Math.floor(minute / 60);
-        minute = minute % 60;
+      if (order.createdAt) {
+        try {
+          const createdAtDate = new Date(order.createdAt);
+          // Only use the time if the date matches (same day)
+          if (formatDateKey(createdAtDate) === dateKey) {
+            hour = createdAtDate.getHours();
+            minute = createdAtDate.getMinutes();
+          } else {
+            // If date doesn't match, use default time but add small offset for multiple orders
+            minute = idx * 15;
+            if (minute >= 60) {
+              hour += Math.floor(minute / 60);
+              minute = minute % 60;
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing createdAt date:', error);
+          // Fallback: use default time with offset
+          minute = idx * 15;
+          if (minute >= 60) {
+            hour += Math.floor(minute / 60);
+            minute = minute % 60;
+          }
+        }
+      } else {
+        // No createdAt, use default time with offset for multiple orders
+        minute = idx * 15;
+        if (minute >= 60) {
+          hour += Math.floor(minute / 60);
+          minute = minute % 60;
+        }
       }
       
-      // Make sure we don't go past 8 PM (20:00)
-      if (hour >= 21) {
+      // Ensure time is within calendar view (8 AM - 9 PM)
+      if (hour < 8) {
+        hour = 8;
+        minute = 0;
+      } else if (hour >= 21) {
         hour = 20;
         minute = 45;
       }
@@ -720,26 +746,115 @@ export default function WorkOrdersPage() {
                                 const leftPercent = (orderIdx % maxOverlap) * orderWidth;
                                 const widthPercent = orderWidth - 1; // Small gap between overlapping orders
 
+                                // Priority-based color scheme
+                                const getPriorityColors = (priority: string) => {
+                                  switch (priority?.toLowerCase()) {
+                                    case 'critical':
+                                      return {
+                                        bg: 'bg-red-500/20',
+                                        border: 'border-red-500/50',
+                                        text: 'text-red-100',
+                                        accent: 'bg-red-500',
+                                        hover: 'hover:bg-red-500/30 hover:border-red-500/70',
+                                      };
+                                    case 'high':
+                                      return {
+                                        bg: 'bg-orange-500/20',
+                                        border: 'border-orange-500/50',
+                                        text: 'text-orange-100',
+                                        accent: 'bg-orange-500',
+                                        hover: 'hover:bg-orange-500/30 hover:border-orange-500/70',
+                                      };
+                                    case 'medium':
+                                      return {
+                                        bg: 'bg-sage-500/20',
+                                        border: 'border-sage-500/50',
+                                        text: 'text-sage-100',
+                                        accent: 'bg-sage-500',
+                                        hover: 'hover:bg-sage-500/30 hover:border-sage-500/70',
+                                      };
+                                    case 'low':
+                                      return {
+                                        bg: 'bg-gray-500/20',
+                                        border: 'border-gray-500/50',
+                                        text: 'text-gray-100',
+                                        accent: 'bg-gray-500',
+                                        hover: 'hover:bg-gray-500/30 hover:border-gray-500/70',
+                                      };
+                                    default:
+                                      return {
+                                        bg: 'bg-blue-500/20',
+                                        border: 'border-blue-500/50',
+                                        text: 'text-blue-100',
+                                        accent: 'bg-blue-500',
+                                        hover: 'hover:bg-blue-500/30 hover:border-blue-500/70',
+                                      };
+                                  }
+                                };
+
+                                const colors = getPriorityColors(order.priority || 'Medium');
+                                const isCompleted = order.workCompleted || order.status === 'completed';
+
                                 return (
                                   <div
                                     key={order.workOrderNo}
-                                    className="absolute rounded px-2 py-1 text-xs cursor-pointer hover:opacity-90 transition-opacity bg-gray-500/20 border border-gray-500/30 text-gray-300 overflow-hidden flex flex-col"
+                                    className={`absolute rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition-all duration-200 ${colors.bg} ${colors.border} border-l-4 ${colors.hover} shadow-lg overflow-hidden flex flex-col group ${
+                                      isCompleted ? 'opacity-60' : ''
+                                    }`}
                                     style={{
                                       top: `${topPx}px`,
                                       height: `${heightPx}px`,
                                       left: `${leftPercent}%`,
                                       width: `${widthPercent}%`,
-                                      minHeight: '48px', // Minimum 3/4 hour
+                                      minHeight: '52px',
                                     }}
                                     onClick={() => {
                                       setSelectedDate(day);
                                       toggleExpand(order.workOrderNo);
                                     }}
                                   >
-                                    <div className="font-semibold truncate text-white">{order.workOrderNo}</div>
-                                    <div className="text-xs opacity-70 truncate text-gray-300">
-                                      {order.machineId}
+                                    {/* Priority indicator bar */}
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${colors.accent} rounded-l-md`} />
+                                    
+                                    {/* Content */}
+                                    <div className="flex-1 flex flex-col justify-between pl-1">
+                                      {/* Header row */}
+                                      <div className="flex items-start justify-between gap-1 mb-0.5">
+                                        <div className="flex-1 min-w-0">
+                                          <div className={`font-bold truncate ${colors.text} text-[11px] leading-tight`}>
+                                            {order.workOrderNo}
+                                          </div>
+                                        </div>
+                                        {isCompleted && (
+                                          <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-green-400 mt-0.5" />
+                                        )}
+                                      </div>
+                                      
+                                      {/* Equipment name */}
+                                      <div className="text-[10px] text-gray-300 truncate leading-tight mb-0.5">
+                                        {order.equipmentName || order.machineId || 'Unknown Equipment'}
+                                      </div>
+                                      
+                                      {/* Footer with time and priority */}
+                                      <div className="flex items-center justify-between gap-1 mt-auto">
+                                        <div className="text-[9px] text-gray-400 leading-tight font-medium">
+                                          {(() => {
+                                            const displayHour = order.hour === 0 ? 12 : order.hour > 12 ? order.hour - 12 : order.hour;
+                                            const ampm = order.hour >= 12 ? 'PM' : 'AM';
+                                            const minutes = order.minute > 0 ? `:${order.minute.toString().padStart(2, '0')}` : '';
+                                            return `${displayHour}${minutes} ${ampm}`;
+                                          })()}
+                                        </div>
+                                        {order.priority && (
+                                          <div className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${colors.accent} ${colors.text} leading-tight shadow-sm`}>
+                                            {order.priority.charAt(0).toUpperCase()}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
+                                    
+                                    {/* Hover effect overlay */}
+                                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
                                   </div>
                                 );
                               })}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDownIcon, ChevronRightIcon, CheckIcon, WarningIcon } from './Icons';
+import { ChevronDownIcon, ChevronRightIcon, CheckIcon, WarningIcon, AlertIcon } from './Icons';
 import { useQuery } from '@tanstack/react-query';
 import { queryAlarmHistory } from '@/lib/influxdb';
 
@@ -33,7 +33,10 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <div>
-            <h3 className="heading-inter heading-inter-sm">Alarm History</h3>
+            <h3 className="heading-inter heading-inter-sm flex items-center gap-2">
+              <AlertIcon className="w-5 h-5 text-sage-400" />
+              Alerts
+            </h3>
             <p className="text-xs text-gray-500 mt-0.5">Last 24 hours</p>
           </div>
           {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
@@ -51,12 +54,15 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <div>
-            <h3 className="heading-inter heading-inter-sm">Alarm History</h3>
+            <h3 className="heading-inter heading-inter-sm flex items-center gap-2">
+              <AlertIcon className="w-5 h-5 text-sage-400" />
+              Alerts
+            </h3>
             <p className="text-xs text-gray-500 mt-0.5">Last 24 hours</p>
           </div>
           {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
         </div>
-        {isExpanded && <div className="text-red-400">Error loading alarm history</div>}
+        {isExpanded && <div className="text-red-400">Error loading alert history</div>}
       </div>
     );
   }
@@ -86,7 +92,10 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
       >
         <div className="flex items-center gap-2">
           <div>
-            <span className="heading-inter heading-inter-sm">Alarm History</span>
+            <span className="heading-inter heading-inter-sm flex items-center gap-2">
+              <AlertIcon className="w-5 h-5 text-sage-400" />
+              Alerts
+            </span>
             <p className="text-xs text-gray-500 mt-0.5">Last 24 hours</p>
           </div>
           {isExpanded ? <ChevronDownIcon className="w-3 h-3 text-gray-500" /> : <ChevronRightIcon className="w-3 h-3 text-gray-500" />}
@@ -100,34 +109,33 @@ export function AlarmHistory({ machineId = 'machine-01', timeRange = '-24h', mac
       
       {isExpanded && (
         <>
-          <div className="space-y-3">
-            {alarms.map((alarm) => {
-              const count = data?.[alarm.field] || 0;
-              return (
-                <div key={alarm.field} className="flex items-center justify-between p-3 bg-dark-bg/50 rounded border border-dark-border">
-                  <div className="flex items-center gap-3">
-                    <span className="text-dark-text font-medium">{alarm.label}</span>
-                    {count > 0 && (
-                      <WarningIcon className="w-3 h-3 text-red-400" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-lg font-bold ${count > 0 ? 'text-red-400' : 'text-sage-400'}`}>
-                      {count}
-                    </span>
-                    <span className="text-gray-500 text-sm">occurrences</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          
-          {totalAlarms === 0 && (
-            <div className="mt-4 p-4 bg-sage-500/10 border border-sage-500/30 rounded text-center">
-              <span className="text-sage-400 text-sm flex items-center gap-1.5">
-                <CheckIcon className="w-4 h-4" />
-                No alarms triggered in last 24 hours
+          {totalAlarms === 0 ? (
+            <div className="p-4 bg-sage-500/10 border border-sage-500/30 rounded text-center">
+              <span className="text-sage-400 text-sm">
+                No alerts triggered in last 24 hours
               </span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {alarms.map((alarm) => {
+                const count = data?.[alarm.field] || 0;
+                return (
+                  <div key={alarm.field} className="flex items-center justify-between p-3 bg-dark-bg/50 rounded border border-dark-border">
+                    <div className="flex items-center gap-3">
+                      <span className="text-dark-text font-medium">{alarm.label}</span>
+                      {count > 0 && (
+                        <WarningIcon className="w-3 h-3 text-red-400" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-lg font-bold ${count > 0 ? 'text-red-400' : 'text-sage-400'}`}>
+                        {count}
+                      </span>
+                      <span className="text-gray-500 text-sm">occurrences</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </>

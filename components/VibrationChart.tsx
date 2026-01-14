@@ -15,11 +15,11 @@ type VibrationAxis = 'vibration' | 'x_vibration' | 'y_vibration' | 'x_acc' | 'y_
 
 const AXIS_COLORS: Record<VibrationAxis, string> = {
   vibration: '#437874', // Sage green (overall) - matches app theme
-  x_vibration: '#6b9e78', // Lighter sage green (X-axis)
-  y_vibration: '#5a8a6a', // Darker sage green (Y-axis)
-  x_acc: '#7ab08a', // Sage green variant (X acceleration)
-  y_acc: '#4a6b5a', // Dark sage green (Y acceleration)
-  z_acc: '#8fb89a', // Light sage green (Z acceleration)
+  x_vibration: '#3b82f6', // Blue (X-axis vibration)
+  y_vibration: '#10b981', // Green (Y-axis vibration)
+  x_acc: '#3b82f6', // Blue (X acceleration)
+  y_acc: '#f59e0b', // Orange (Y acceleration)
+  z_acc: '#10b981', // Green (Z acceleration)
 };
 
 const AXIS_LABELS: Record<VibrationAxis, string> = {
@@ -45,7 +45,6 @@ export function VibrationChart({
   // Use raw data for short ranges, aggregated for longer ranges
   const windowPeriod = selectedTimeRange === '24h' ? '1m' : 'raw'; // 1 minute aggregation for 24h, raw for others
   
-  // Default to showing all three vibration axes
   const [selectedAxes, setSelectedAxes] = useState<VibrationAxis[]>(['z_acc', 'x_acc', 'y_acc']);
   
   // State for last seen timestamp
@@ -276,13 +275,6 @@ export function VibrationChart({
     { value: 'z_acc', label: 'Z-Axis Acceleration' },
   ];
 
-  const toggleAxis = (axis: VibrationAxis) => {
-    setSelectedAxes(prev => 
-      prev.includes(axis) 
-        ? prev.filter(a => a !== axis)
-        : [...prev, axis]
-    );
-  };
 
   const timeRangeOptions: { value: TimeRangeOption; label: string }[] = [
     { value: '5m', label: 'Last 5 Minutes' },
@@ -305,11 +297,11 @@ export function VibrationChart({
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400">Time Range:</label>
-            <select
-              value={selectedTimeRange}
-              onChange={(e) => handleTimeRangeChange(e.target.value as TimeRangeOption)}
-              className="bg-dark-panel border border-dark-border rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
-            >
+          <select
+            value={selectedTimeRange || '5m'}
+            onChange={(e) => handleTimeRangeChange(e.target.value as TimeRangeOption)}
+            className="bg-dark-panel border border-dark-border rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
+          >
             {timeRangeOptions.map(option => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -433,6 +425,35 @@ export function VibrationChart({
         <div className="text-gray-400 text-center py-8">Please select at least one axis to display</div>
       ) : (
         <div className="text-gray-400 text-center py-8">No vibration data points to display</div>
+      )}
+
+      {/* Zoomed Time Range Display */}
+      {isZoomed && chartData.length > 0 && (
+        <div className="mt-3 text-center">
+          <div className="text-xs text-gray-400 inline-block bg-dark-panel border border-dark-border rounded px-3 py-1.5">
+            <span className="text-gray-300 font-medium mr-2">Zoomed Range:</span>
+            <span className="text-gray-400">
+              {(() => {
+                const startTime = chartData[0]?.fullTime ? new Date(chartData[0].fullTime) : null;
+                const endTime = chartData[chartData.length - 1]?.fullTime ? new Date(chartData[chartData.length - 1].fullTime) : null;
+                
+                if (startTime && endTime) {
+                  const formatTime = (date: Date) => {
+                    return date.toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    });
+                  };
+                  return `${formatTime(startTime)} - ${formatTime(endTime)}`;
+                }
+                return 'N/A';
+              })()}
+            </span>
+          </div>
+        </div>
       )}
 
       {/* Instructions */}

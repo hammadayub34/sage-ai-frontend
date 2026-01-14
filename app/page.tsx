@@ -1,19 +1,19 @@
 'use client';
 
-import { TagsTable } from '@/components/TagsTable';
 import { ServiceControlsButton } from '@/components/ServiceControlsButton';
 import { TimeSeriesChart } from '@/components/TimeSeriesChart';
 import { AlarmHistory } from '@/components/AlarmHistory';
 import { AlarmEvents } from '@/components/AlarmEvents';
 import { DowntimeStats } from '@/components/DowntimeStats';
 import { WorkOrderForm } from '@/components/WorkOrderForm';
-import { RefreshIcon, SignalIcon } from '@/components/Icons';
+import { RefreshIcon, SignalIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, CheckIcon } from '@/components/Icons';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { VibrationChart } from '@/components/VibrationChart';
 import { ModbusChart } from '@/components/ModbusChart';
 import { toast } from 'react-toastify';
+import { formatAlarmName } from '@/lib/utils';
 
 interface Lab {
   _id: string;
@@ -34,6 +34,43 @@ interface Machine {
   status: 'active' | 'inactive';
   description?: string;
   nodes?: Node[];
+}
+
+interface WorkOrder {
+  workOrderNo: string;
+  machineId: string;
+  status: string;
+  priority: string;
+  weekNo: string;
+  weekOf: string;
+  alarmType: string;
+  machineType: string;
+  equipmentName: string;
+  equipmentNumber: string;
+  equipmentLocation: string;
+  equipmentDescription: string;
+  location: string;
+  building: string;
+  floor: string;
+  room: string;
+  specialInstructions: string;
+  shop: string;
+  vendor: string;
+  vendorAddress: string;
+  vendorPhone: string;
+  vendorContact: string;
+  taskNumber: string;
+  frequency: string;
+  workDescription: string;
+  workPerformedBy: string;
+  workPerformed: string;
+  standardHours: number;
+  overtimeHours: number;
+  workCompleted: boolean;
+  companyName: string;
+  createdAt: string;
+  parts: any[];
+  materials: any[];
 }
 
 export default function Dashboard() {
@@ -148,11 +185,15 @@ export default function Dashboard() {
 
       if (data.success) {
         setMachines(data.machines || []);
-        // Auto-select first machine if available
+        // Auto-select Polyol Pump Motor if available, otherwise first machine
         if (data.machines && data.machines.length > 0) {
-          const firstMachine = data.machines[0];
-          setSelectedMachineId(firstMachine._id);
-          setSelectedMachine(firstMachine);
+          const polyolMotor = data.machines.find((machine: Machine) => 
+            machine.machineName?.toLowerCase().includes('polyol') && 
+            machine.machineName?.toLowerCase().includes('pump')
+          );
+          const machineToSelect = polyolMotor || data.machines[0];
+          setSelectedMachineId(machineToSelect._id);
+          setSelectedMachine(machineToSelect);
         } else {
           setSelectedMachineId('');
           setSelectedMachine(null);
@@ -190,6 +231,74 @@ export default function Dashboard() {
     setSelectedMachineId(machineId);
     const machine = machines.find(m => m._id === machineId) || null;
     setSelectedMachine(machine);
+    // Fetch work orders for the selected machine
+    if (machineId) {
+      fetchWorkOrdersForMachine(machineId);
+    } else {
+      setWorkOrders([]);
+    }
+  };
+
+  // Fetch work orders for a specific machine
+  const fetchWorkOrdersForMachine = async (machineId: string) => {
+    setLoadingWorkOrders(true);
+    try {
+      const response = await fetch(`/api/work-orders?machineId=${machineId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch work orders');
+      }
+      const data = await response.json();
+      setWorkOrders(data.data || []);
+    } catch (error) {
+      console.error('Error fetching work orders:', error);
+      toast.error('Failed to load work orders');
+      setWorkOrders([]);
+    } finally {
+      setLoadingWorkOrders(false);
+    }
+  };
+
+  // Fetch work orders when machine is selected initially
+  useEffect(() => {
+    if (selectedMachineId) {
+      fetchWorkOrdersForMachine(selectedMachineId);
+    }
+  }, [selectedMachineId]);
+
+  const toggleExpand = (workOrderNo: string) => {
+    setExpandedOrders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(workOrderNo)) {
+        newSet.delete(workOrderNo);
+      } else {
+        newSet.add(workOrderNo);
+      }
+      return newSet;
+    });
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case 'critical':
+        return 'text-red-400 bg-red-500/10 border-red-500/30';
+      case 'high':
+        return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
+      case 'medium':
+        return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+      default:
+        return 'text-gray-400 bg-gray-500/10 border-gray-500/30';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'text-sage-400 bg-sage-500/10 border-sage-500/30';
+      case 'pending':
+        return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30';
+      default:
+        return 'text-gray-400 bg-gray-500/10 border-gray-500/30';
+    }
   };
 
   const [workOrderFormOpen, setWorkOrderFormOpen] = useState(false);
@@ -198,6 +307,9 @@ export default function Dashboard() {
   const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const queryClient = useQueryClient();
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   
   const handleRefresh = () => {
     // Invalidate all queries to force refresh
@@ -443,6 +555,169 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Work Orders Section */}
+      {selectedMachineId && (
+        <div className="mb-6">
+          <div className="bg-dark-panel border border-dark-border rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <CalendarIcon className="w-6 h-6 text-sage-400" />
+              <h2 className="heading-inter heading-inter-sm text-white">Work Orders</h2>
+            </div>
+
+            {loadingWorkOrders ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                <span className="ml-3 text-gray-400">Loading work orders...</span>
+              </div>
+            ) : workOrders.length === 0 ? (
+              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded text-center">
+                <span className="text-gray-400 text-sm">
+                  No work orders found for this machine
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {workOrders.map((order) => {
+                  const isExpanded = expandedOrders.has(order.workOrderNo);
+                  return (
+                    <div
+                      key={order.workOrderNo}
+                      className="bg-dark-bg border border-dark-border rounded-lg hover:border-midnight-300 transition-colors"
+                    >
+                      {/* Header - Clickable */}
+                      <div
+                        className="p-6 cursor-pointer"
+                        onClick={() => toggleExpand(order.workOrderNo)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              {isExpanded ? (
+                                <ChevronDownIcon className="w-4 h-4 text-gray-400" />
+                              ) : (
+                                <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+                              )}
+                              <h3 className="text-white font-semibold text-lg">{order.workOrderNo}</h3>
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-medium border ${getPriorityColor(order.priority)}`}
+                              >
+                                {order.priority}
+                              </span>
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(order.status)}`}
+                              >
+                                {order.status.charAt(0).toUpperCase() + order.status.slice(1).toLowerCase()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-400">
+                              {order.equipmentName && (
+                                <span>
+                                  <span className="font-semibold text-gray-300">Equipment:</span> {order.equipmentName}
+                                </span>
+                              )}
+                              {order.alarmType && (
+                                <span>
+                                  <span className="font-semibold text-gray-300">Alarm:</span>{' '}
+                                  {formatAlarmName(order.alarmType)}
+                                </span>
+                              )}
+                              {order.taskNumber && (
+                                <span>
+                                  <span className="font-semibold text-gray-300">Task:</span> {order.taskNumber}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm text-gray-400">
+                            <div>
+                              {new Date(order.createdAt).toLocaleDateString()} {new Date(order.createdAt).toLocaleTimeString()}
+                            </div>
+                            {order.weekOf && (
+                              <div className="mt-1">Week of: {order.weekOf}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {!isExpanded && order.workDescription && (
+                          <div className="mt-4">
+                            <p className="text-gray-300 text-sm">{order.workDescription.substring(0, 200)}...</p>
+                          </div>
+                        )}
+
+                        {!isExpanded && (
+                          <div className="flex items-center gap-6 text-sm text-gray-400 mt-4">
+                            {order.standardHours > 0 && (
+                              <span>
+                                <span className="font-semibold text-gray-300">Hours:</span> {order.standardHours}
+                              </span>
+                            )}
+                            {order.workPerformedBy && (
+                              <span>
+                                <span className="font-semibold text-gray-300">Performed by:</span> {order.workPerformedBy}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="px-6 pb-6 border-t border-dark-border pt-4">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            {order.workDescription && (
+                              <div className="col-span-2">
+                                <span className="font-semibold text-gray-300">Description:</span>
+                                <p className="text-gray-400 mt-1">{order.workDescription}</p>
+                              </div>
+                            )}
+                            {order.specialInstructions && (
+                              <div className="col-span-2">
+                                <span className="font-semibold text-gray-300">Special Instructions:</span>
+                                <p className="text-gray-400 mt-1">{order.specialInstructions}</p>
+                              </div>
+                            )}
+                            {order.equipmentLocation && (
+                              <div>
+                                <span className="font-semibold text-gray-300">Location:</span>
+                                <p className="text-gray-400 mt-1">{order.equipmentLocation}</p>
+                              </div>
+                            )}
+                            {order.vendor && (
+                              <div>
+                                <span className="font-semibold text-gray-300">Vendor:</span>
+                                <p className="text-gray-400 mt-1">{order.vendor}</p>
+                              </div>
+                            )}
+                            {order.standardHours > 0 && (
+                              <div>
+                                <span className="font-semibold text-gray-300">Standard Hours:</span>
+                                <p className="text-gray-400 mt-1">{order.standardHours}</p>
+                              </div>
+                            )}
+                            {order.overtimeHours > 0 && (
+                              <div>
+                                <span className="font-semibold text-gray-300">Overtime Hours:</span>
+                                <p className="text-gray-400 mt-1">{order.overtimeHours}</p>
+                              </div>
+                            )}
+                            {order.workPerformed && (
+                              <div className="col-span-2">
+                                <span className="font-semibold text-gray-300">Work Performed:</span>
+                                <p className="text-gray-400 mt-1">{order.workPerformed}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Alarm History */}
       {selectedMachineId && (
         <div className="mb-6">
@@ -455,15 +730,6 @@ export default function Dashboard() {
         <div className="mb-6">
           <AlarmEvents machineId={selectedMachineId} />
         </div>
-      )}
-
-      {/* Tags Table */}
-      {selectedMachineId && (
-        <TagsTable 
-          machineId={selectedMachineId} 
-          macAddress={selectedMachineMAC}
-          machineName={selectedMachine?.machineName}
-        />
       )}
 
       {/* Work Order Form Modal */}

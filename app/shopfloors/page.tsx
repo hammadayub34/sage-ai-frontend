@@ -26,6 +26,7 @@ interface Machine {
   description?: string;
   nodeId?: string;
   nodes?: Node[];
+  lastSeen?: string | null;
 }
 
 type ViewMode = 'list' | 'cards';
@@ -99,7 +100,35 @@ export default function ShopfloorsPage() {
       const data = await response.json();
 
       if (data.success) {
-        setMachines(data.machines || []);
+        const machinesList = data.machines || [];
+        
+        // Set machines immediately without waiting for last seen timestamps
+        setMachines(machinesList.map((machine: Machine) => ({
+          ...machine,
+          lastSeen: null, // Will be populated asynchronously
+        })));
+        
+        // Fetch last seen timestamps asynchronously (don't block UI)
+        Promise.all(
+          machinesList.map(async (machine: Machine) => {
+            try {
+              const lastSeenResponse = await fetch(`/api/influxdb/last-seen?machineId=${machine._id}`);
+              if (lastSeenResponse.ok) {
+                const lastSeenData = await lastSeenResponse.json();
+                // Update the specific machine's last seen timestamp
+                setMachines(prev => prev.map(m => 
+                  m._id === machine._id 
+                    ? { ...m, lastSeen: lastSeenData.lastSeen || null }
+                    : m
+                ));
+              }
+            } catch (error) {
+              console.error(`Error fetching last seen for machine ${machine._id}:`, error);
+            }
+          })
+        ).catch(error => {
+          console.error('Error fetching last seen timestamps:', error);
+        });
       } else {
         toast.error('Failed to fetch machines');
         setMachines([]);
@@ -218,10 +247,20 @@ export default function ShopfloorsPage() {
                 className="bg-dark-panel border border-dark-border rounded-lg p-3 hover:border-sage-500/50 transition-all"
               >
                 <div className="flex items-start justify-between mb-2">
-                  <div>
+                  <div className="flex-1">
                     <h3 className="text-sm font-medium text-white mb-1 line-clamp-2">{machine.machineName}</h3>
                     {machine.description && (
                       <p className="text-xs text-gray-400 line-clamp-1">{machine.description}</p>
+                    )}
+                    {machine.lastSeen && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Last seen: {new Date(machine.lastSeen).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
                     )}
                   </div>
                   <span
@@ -289,7 +328,19 @@ export default function ShopfloorsPage() {
                 className="bg-dark-panel border border-dark-border rounded-lg p-3 hover:border-sage-500/50 transition-all aspect-[4/3] flex flex-col"
               >
                 <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-sm font-medium text-white line-clamp-2">{machine.machineName}</h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-white line-clamp-2">{machine.machineName}</h3>
+                    {machine.lastSeen && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Last seen: {new Date(machine.lastSeen).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    )}
+                  </div>
                   <span
                     className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded flex-shrink-0 ${
                       machine.status === 'active'
