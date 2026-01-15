@@ -355,12 +355,12 @@ export default function ShopfloorsPage() {
               >
                 <div className="mb-2">
                   <div className="flex-1">
-                    <h3 className="text-sm font-medium text-white mb-1 line-clamp-2">{machine.machineName}</h3>
+                    <h3 className="text-sm font-medium text-gray-300 mb-1 line-clamp-2">{machine.machineName}</h3>
                     {machine.description && (
-                      <p className="text-xs text-gray-400 line-clamp-1 mb-1">{machine.description}</p>
+                      <p className="text-xs text-gray-300 line-clamp-1 mb-1">{machine.description}</p>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">
-                      <span className={`text-gray-500 ${fetchingLastSeen.has(machine._id) ? 'animate-pulse' : ''}`}>Last seen:</span> {fetchingLastSeen.has(machine._id) ? '' : formatLastSeenTime(machine.lastSeen || null)}
+                    <p className="text-xs text-gray-300 mt-1">
+                      <span className={`text-gray-400 ${fetchingLastSeen.has(machine._id) ? 'animate-pulse' : ''}`}>Last seen:</span> {fetchingLastSeen.has(machine._id) ? '' : formatLastSeenTime(machine.lastSeen || null)}
                     </p>
                   </div>
                 </div>
@@ -421,17 +421,17 @@ export default function ShopfloorsPage() {
                 <div className="flex-1 flex flex-col min-h-0 mb-16">
                   <div className="mb-2">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-white line-clamp-2">{machine.machineName}</h3>
+                      <h3 className="text-sm font-medium text-gray-300 line-clamp-2">{machine.machineName}</h3>
                       {machine.description && (
-                        <p className="text-xs text-gray-400 mt-1 mb-1 line-clamp-1">{machine.description}</p>
+                        <p className="text-xs text-gray-300 mt-1 mb-1 line-clamp-1">{machine.description}</p>
                       )}
                       {fetchingLastSeen.has(machine._id) ? (
-                        <p className="text-xs text-gray-400 mt-1">
-                          <span className={`text-gray-500 ${fetchingLastSeen.has(machine._id) ? 'animate-pulse' : ''}`}>Last seen:</span> {fetchingLastSeen.has(machine._id) ? '' : formatLastSeenTime(machine.lastSeen || null)}
+                        <p className="text-xs text-gray-300 mt-1">
+                          <span className={`text-gray-400 ${fetchingLastSeen.has(machine._id) ? 'animate-pulse' : ''}`}>Last seen:</span> {fetchingLastSeen.has(machine._id) ? '' : formatLastSeenTime(machine.lastSeen || null)}
                         </p>
                       ) : (
-                        <p className="text-xs text-gray-400 mt-1">
-                          <span className="text-gray-500">Last seen:</span> {formatLastSeenTime(machine.lastSeen || null)}
+                        <p className="text-xs text-gray-300 mt-1">
+                          <span className="text-gray-400">Last seen:</span> {formatLastSeenTime(machine.lastSeen || null)}
                         </p>
                       )}
                     </div>

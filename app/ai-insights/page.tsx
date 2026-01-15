@@ -1272,8 +1272,8 @@ export default function AIInsightsPage() {
               }}
             />
       </div>
-        </div>
-      </div>
+              </div>
+            </div>
 
       {/* Shift Tabs - Right Side, Above Performance */}
       {selectedLabId && labShifts.length > 0 && (
@@ -1411,11 +1411,11 @@ export default function AIInsightsPage() {
       {selectedLabId && (
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <h2 className="heading-inter heading-inter-sm text-gray-300 flex items-center gap-2">
               <ClockIcon className="w-5 h-5 text-sage-400" />
               Performance
             </h2>
-            <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
+            <span className="text-xs text-gray-400">{getDateRangeLabel(dateRange)}</span>
           </div>
 
           {loadingStats ? (
@@ -1480,7 +1480,7 @@ export default function AIInsightsPage() {
                       <div className="text-3xl font-bold text-red-400">
                         {normalizedDowntimePercentage.toFixed(1)}%
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-400 mt-1">
                         {downtimeHours.toFixed(1)}h / {scheduledHours.toFixed(1)}h
                       </div>
                       {previousDowntimePercentage !== null && (
@@ -1499,7 +1499,7 @@ export default function AIInsightsPage() {
                       <div className="text-3xl font-bold text-sage-400">
                         {normalizedUptimePercentage.toFixed(1)}%
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-400 mt-1">
                         {(idleHours + productiveHours).toFixed(1)}h (Idle + Productive) / {scheduledHours.toFixed(1)}h
                       </div>
                       {previousUptimePercentage !== null && (
@@ -1523,7 +1523,7 @@ export default function AIInsightsPage() {
                       <div className="text-3xl font-bold text-red-400">
                         {maintenanceStats.downtimePercentage.toFixed(1)}%
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-400 mt-1">
                         {formatDuration(maintenanceStats.totalDowntime)}
                       </div>
                       <ComparisonBadge 
@@ -1540,7 +1540,7 @@ export default function AIInsightsPage() {
                       <div className="text-3xl font-bold text-sage-400">
                         {maintenanceStats.uptimePercentage.toFixed(1)}%
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-400 mt-1">
                         {formatDuration(maintenanceStats.totalUptime)}
                       </div>
                       <ComparisonBadge 
@@ -1550,9 +1550,9 @@ export default function AIInsightsPage() {
                         lowerIsBetter={false}
                       />
                     </div>
-                  </div>
-                );
-              }
+    </div>
+  );
+}
             })()
           ) : null}
         </div>
@@ -1562,11 +1562,11 @@ export default function AIInsightsPage() {
       {selectedLabId && selectedShift && (
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <h2 className="heading-inter heading-inter-sm text-gray-300 flex items-center gap-2">
               <ChartIcon className="w-5 h-5 text-sage-400" />
               Shift Utilization - {formatShiftName(selectedShift)}
             </h2>
-            <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
+            <span className="text-xs text-gray-400">{getDateRangeLabel(dateRange)}</span>
           </div>
 
           {loadingShiftUtilization ? (
@@ -1614,7 +1614,7 @@ export default function AIInsightsPage() {
                         <div className="text-3xl font-bold text-sage-400">
                           {(shiftUtilization.averageUtilization || 0).toFixed(1)}%
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-gray-400 mt-1">
                           {shiftUtilization.machinesWithData || 0} of {shiftUtilization.totalMachines || 0} machines
                         </div>
                         <ComparisonBadge 
@@ -1631,7 +1631,7 @@ export default function AIInsightsPage() {
                         <div className="text-3xl font-bold text-green-400">
                           {(productiveHours || 0).toFixed(1)}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-gray-400 mt-1">
                           Total hours
                         </div>
                         <ComparisonBadge 
@@ -1649,7 +1649,7 @@ export default function AIInsightsPage() {
                         <div className="text-3xl font-bold text-red-400">
                           {(downtimeHours || 0).toFixed(1)}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-gray-400 mt-1">
                           Total hours
                         </div>
                         <ComparisonBadge 
@@ -1667,7 +1667,7 @@ export default function AIInsightsPage() {
                         <div className="text-3xl font-bold text-yellow-400">
                           {(idleHours || 0).toFixed(1)}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-gray-400 mt-1">
                           Total hours
                         </div>
                         <ComparisonBadge 
@@ -1682,10 +1682,10 @@ export default function AIInsightsPage() {
                       {/* Scheduled Hours */}
                       <div className="bg-dark-bg border border-dark-border rounded p-4">
                         <div className="text-gray-400 text-sm mb-1">Scheduled Hours</div>
-                        <div className="text-3xl font-bold text-white">
+                        <div className="text-3xl font-bold text-gray-300">
                           {(scheduledHours || 0).toFixed(1)}
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-gray-400 mt-1">
                           Total hours
                         </div>
                         <ComparisonBadge 
@@ -1722,21 +1722,17 @@ export default function AIInsightsPage() {
                           <tr key={index} className="border-b border-dark-border/50 hover:bg-dark-bg/50">
                             <td className="py-2 px-4 text-gray-300 text-sm">{machine.machineName}</td>
                             <td className="py-2 px-4 text-right text-sm">
-                              <span className={`font-semibold ${
-                                machine.averageUtilization >= 70 ? 'text-green-400' :
-                                machine.averageUtilization >= 50 ? 'text-yellow-400' :
-                                'text-red-400'
-                              }`}>
+                              <span className="font-semibold text-sage-400">
                                 {machine.averageUtilization.toFixed(1)}%
                               </span>
                             </td>
-                            <td className="py-2 px-4 text-right text-gray-300 text-sm">
+                            <td className="py-2 px-4 text-right text-green-400 text-sm font-medium">
                               {machine.totalProductiveHours.toFixed(1)}h
                             </td>
                             <td className="py-2 px-4 text-right text-red-400 text-sm font-medium">
                               {machine.totalNonProductiveHours.toFixed(1)}h
                             </td>
-                            <td className="py-2 px-4 text-right text-gray-300 text-sm">
+                            <td className="py-2 px-4 text-right text-yellow-400 text-sm font-medium">
                               {machine.totalIdleHours.toFixed(1)}h
                             </td>
                             <td className="py-2 px-4 text-right text-gray-300 text-sm">
@@ -1755,7 +1751,7 @@ export default function AIInsightsPage() {
               <div className="text-gray-400 text-sm">
                 Shift Utilization not found for {formatShiftName(selectedShift)}
               </div>
-              <div className="text-xs text-gray-500 mt-2">
+              <div className="text-xs text-gray-400 mt-2">
                 No utilization data available for the selected shift and date range
               </div>
             </div>
@@ -1767,11 +1763,11 @@ export default function AIInsightsPage() {
       {selectedLabId && (
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <h2 className="heading-inter heading-inter-sm text-gray-300 flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-sage-400" />
               Events
             </h2>
-            <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
+            <span className="text-xs text-gray-400">{getDateRangeLabel(dateRange)}</span>
           </div>
 
           {loadingStats || loadingAlerts || loadingDowntimeIncidents ? (
@@ -1790,10 +1786,10 @@ export default function AIInsightsPage() {
             {/* Scheduled Maintenance */}
             <div className="bg-dark-bg border border-dark-border rounded p-4">
               <div className="text-gray-400 text-sm mb-1">Scheduled Maintenance</div>
-              <div className="text-3xl font-bold text-white">
+              <div className="text-3xl font-bold text-gray-300">
                 {maintenanceStats.scheduledMaintenanceCount}
               </div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-gray-400 mt-1">
                 Work orders
               </div>
             </div>
@@ -1804,7 +1800,7 @@ export default function AIInsightsPage() {
                   <div className="text-3xl font-bold text-yellow-400">
                     {alertsCount}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-400 mt-1">
                     Alert events
                   </div>
                   <ComparisonBadge 
@@ -1822,7 +1818,7 @@ export default function AIInsightsPage() {
                   <div className="text-3xl font-bold text-red-400">
                     {downtimeIncidentsCount}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-400 mt-1">
                     {downtimeIncidentsCount === 1 ? 'incident' : 'incidents'}
                   </div>
                   <ComparisonBadge 
