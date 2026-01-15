@@ -314,7 +314,106 @@ export default function Dashboard() {
 
   const queryClient = useQueryClient();
 
-  // Fetch downtime stats for analysis
+  // Fetch shift utilization data for the selected machine across all shifts
+  const { data: shiftUtilizationData, isLoading: isLoadingShiftUtilization } = useQuery({
+    queryKey: ['shift-utilization', selectedLabId, selectedMachineId, selectedTimeRange],
+    queryFn: async () => {
+      if (!selectedLabId || !selectedMachineId || !selectedMachine) return null;
+      
+      try {
+        // Get lab details to fetch all shifts
+        const labsResponse = await fetch('/api/labs');
+        if (!labsResponse.ok) return null;
+        
+        const labsData = await labsResponse.json();
+        if (!labsData.success || !labsData.labs) return null;
+        
+        const lab = labsData.labs.find((l: Lab) => {
+          const lId = l._id?.toString() || l._id;
+          const selectedId = selectedLabId?.toString() || selectedLabId;
+          return lId === selectedId;
+        });
+        
+        if (!lab || !lab.shifts || lab.shifts.length === 0) return null;
+        
+        // Calculate date range based on selectedTimeRange
+        const endDate = new Date();
+        const startDate = new Date();
+        
+        if (selectedTimeRange === '24h') {
+          startDate.setDate(startDate.getDate() - 1);
+        } else if (selectedTimeRange === '7d') {
+          startDate.setDate(startDate.getDate() - 7);
+        } else if (selectedTimeRange === '30d') {
+          startDate.setDate(startDate.getDate() - 30);
+        }
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        // Fetch shift utilization for each shift and aggregate
+        const shiftPromises = lab.shifts.map(async (shift: any) => {
+          try {
+            const response = await fetch(
+              `/api/shift-utilization?labId=${selectedLabId}&shiftName=${shift.name}&startDate=${startDateStr}&endDate=${endDateStr}`
+            );
+            if (!response.ok) return null;
+            
+            const result = await response.json();
+            if (!result.success || !result.data) return null;
+            
+            // Find data for the selected machine
+            const machineData = result.data.machineUtilizations?.find(
+              (m: any) => m.machineName === selectedMachine.machineName
+            );
+            
+            if (machineData) {
+              return {
+                totalScheduledHours: machineData.totalScheduledHours || 0,
+                totalProductiveHours: machineData.totalProductiveHours || 0,
+                totalIdleHours: machineData.totalIdleHours || 0,
+                totalNonProductiveHours: machineData.totalNonProductiveHours || 0,
+              };
+            }
+            return null;
+          } catch (error) {
+            console.error(`Error fetching shift ${shift.name}:`, error);
+            return null;
+          }
+        });
+        
+        const shiftResults = await Promise.all(shiftPromises);
+        
+        // Aggregate across all shifts
+        const aggregated = shiftResults.reduce(
+          (acc, shiftData) => {
+            if (shiftData) {
+              acc.totalScheduledHours += shiftData.totalScheduledHours;
+              acc.totalProductiveHours += shiftData.totalProductiveHours;
+              acc.totalIdleHours += shiftData.totalIdleHours;
+              acc.totalNonProductiveHours += shiftData.totalNonProductiveHours;
+            }
+            return acc;
+          },
+          {
+            totalScheduledHours: 0,
+            totalProductiveHours: 0,
+            totalIdleHours: 0,
+            totalNonProductiveHours: 0,
+          }
+        );
+        
+        // Only return if we have scheduled hours
+        return aggregated.totalScheduledHours > 0 ? aggregated : null;
+      } catch (error) {
+        console.error('Error fetching shift utilization:', error);
+        return null;
+      }
+    },
+    enabled: !!selectedLabId && !!selectedMachineId && !!selectedMachine,
+  });
+
+  // Fetch downtime stats for analysis (fallback when shift utilization is not available)
   const { data: downtimeData } = useQuery({
     queryKey: ['downtime', selectedMachineId, selectedTimeRange],
     queryFn: async () => {
@@ -324,7 +423,7 @@ export default function Dashboard() {
       const result = await response.json();
       return result.data;
     },
-    enabled: !!selectedMachineId,
+    enabled: !!selectedMachineId && !shiftUtilizationData, // Only fetch if shift utilization is not available
   });
 
   // Fetch alarm history for analysis
@@ -818,7 +917,13 @@ export default function Dashboard() {
       {/* Downtime Statistics */}
       {selectedMachineId && (
         <div className="mb-6">
-          <DowntimeStats machineId={selectedMachineId} timeRange={`-${selectedTimeRange}`} />
+          <DowntimeStats 
+            machineId={selectedMachineId} 
+            timeRange={`-${selectedTimeRange}`}
+            shiftUtilizationData={isLoadingShiftUtilization ? undefined : (shiftUtilizationData || null)}
+            machineName={selectedMachine?.machineName}
+            labId={selectedLabId}
+          />
         </div>
       )}
 

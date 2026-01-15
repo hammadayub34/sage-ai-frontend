@@ -3,10 +3,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { ClockIcon, TrendingUpIcon, ArrowUpIcon, ArrowDownIcon, ArrowRightIcon } from './Icons';
 
+interface ShiftUtilizationData {
+  totalScheduledHours: number;
+  totalProductiveHours: number;
+  totalIdleHours: number;
+  totalNonProductiveHours: number;
+}
+
 interface DowntimeStatsProps {
   machineId: string;
   timeRange?: string;
   machineType?: 'bottlefiller' | 'lathe';
+  shiftUtilizationData?: ShiftUtilizationData | null;
+  machineName?: string;
+  labId?: string;
 }
 
 interface DowntimePeriod {
@@ -59,21 +69,38 @@ async function fetchDowntimeStats(
   return result.data;
 }
 
-export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: DowntimeStatsProps) {
+export function DowntimeStats({ machineId, timeRange = '-24h', machineType, shiftUtilizationData, machineName, labId }: DowntimeStatsProps) {
   const { data, isLoading, error } = useQuery<DowntimeStats>({
     queryKey: ['downtime', machineId, timeRange, machineType],
     queryFn: () => fetchDowntimeStats(machineId, timeRange, machineType),
     refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !shiftUtilizationData, // Only fetch from InfluxDB if shift utilization data is not available
   });
 
-  if (isLoading) {
+  // Show loading if we're waiting for data
+  // If shiftUtilizationData is undefined, we're still loading it
+  // If it's null, it means no data was found, so we should use InfluxDB data
+  const isWaitingForShiftUtilization = labId && shiftUtilizationData === undefined;
+  if (isLoading || isWaitingForShiftUtilization) {
     return (
       <div className="bg-dark-panel border border-dark-border rounded-lg p-6">
-        <h2 className="heading-inter heading-inter-sm text-white mb-4 flex items-center gap-2">
-          <ClockIcon className="w-5 h-5 text-sage-400" />
-          Performance
-        </h2>
-        <div className="text-gray-400">Loading downtime data...</div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <ClockIcon className="w-5 h-5 text-sage-400" />
+            Performance
+          </h2>
+          <div className="h-3 bg-dark-border rounded w-24 animate-pulse"></div>
+        </div>
+        {/* Loading skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-dark-bg border border-dark-border rounded p-4">
+              <div className="h-4 bg-dark-border rounded w-20 mb-3 animate-pulse"></div>
+              <div className="h-10 bg-dark-border rounded w-24 mb-2 animate-pulse"></div>
+              <div className="h-3 bg-dark-border rounded w-32 animate-pulse"></div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -90,14 +117,48 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
     );
   }
 
-  const stats = data || {
-    downtimePercentage: 0,
-    uptimePercentage: 100,
-    totalDowntime: 0,
-    totalUptime: 0,
-    incidentCount: 0,
-    periods: [],
-  };
+  // Use shift utilization data if available, otherwise use InfluxDB data
+  let stats: DowntimeStats;
+  
+  if (shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0) {
+    const scheduledHours = shiftUtilizationData.totalScheduledHours;
+    const downtimeHours = shiftUtilizationData.totalNonProductiveHours;
+    const productiveHours = shiftUtilizationData.totalProductiveHours;
+    const idleHours = shiftUtilizationData.totalIdleHours;
+    
+    // Calculate percentages
+    const downtimePercentage = (downtimeHours / scheduledHours) * 100;
+    const uptimePercentage = ((idleHours + productiveHours) / scheduledHours) * 100;
+    
+    // Ensure total is exactly 100%
+    const totalPercentage = downtimePercentage + uptimePercentage;
+    const normalizedDowntimePercentage = downtimePercentage;
+    const normalizedUptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+      ? 100 - downtimePercentage
+      : uptimePercentage;
+    
+    // Convert hours to seconds for consistency
+    const totalDowntimeSeconds = downtimeHours * 3600;
+    const totalUptimeSeconds = (idleHours + productiveHours) * 3600;
+    
+    stats = {
+      downtimePercentage: normalizedDowntimePercentage,
+      uptimePercentage: normalizedUptimePercentage,
+      totalDowntime: totalDowntimeSeconds,
+      totalUptime: totalUptimeSeconds,
+      incidentCount: 0, // Shift utilization doesn't provide incident count
+      periods: [],
+    };
+  } else {
+    stats = data || {
+      downtimePercentage: 0,
+      uptimePercentage: 100,
+      totalDowntime: 0,
+      totalUptime: 0,
+      incidentCount: 0,
+      periods: [],
+    };
+  }
 
   // Format time range for display
   const formatTimeRange = (range: string): string => {
@@ -156,7 +217,11 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
             )}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {stats.incidentCount > 0 ? `${stats.incidentCount} incident${stats.incidentCount === 1 ? '' : 's'}` : 'No downtime'}
+            {shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0 ? (
+              `${(shiftUtilizationData.totalNonProductiveHours).toFixed(1)}h / ${(shiftUtilizationData.totalScheduledHours).toFixed(1)}h`
+            ) : (
+              stats.incidentCount > 0 ? `${stats.incidentCount} incident${stats.incidentCount === 1 ? '' : 's'}` : 'No downtime'
+            )}
           </div>
           {stats.comparison && (
             <div className="text-xs text-gray-600 mt-1">
@@ -170,8 +235,14 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType }: Do
           <div className="text-gray-400 text-sm mb-1">Uptime</div>
           <div className="text-3xl font-bold text-sage-400">{stats.uptimePercentage.toFixed(1)}%</div>
           <div className="text-xs text-gray-500 mt-1">
-            <TrendingUpIcon className="w-3 h-3 inline mr-1" />
-            Availability
+            {shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0 ? (
+              `${((shiftUtilizationData.totalIdleHours + shiftUtilizationData.totalProductiveHours)).toFixed(1)}h (Idle + Productive) / ${(shiftUtilizationData.totalScheduledHours).toFixed(1)}h`
+            ) : (
+              <>
+                <TrendingUpIcon className="w-3 h-3 inline mr-1" />
+                Availability
+              </>
+            )}
           </div>
         </div>
 

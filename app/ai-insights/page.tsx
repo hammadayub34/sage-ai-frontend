@@ -1272,8 +1272,8 @@ export default function AIInsightsPage() {
               }}
             />
       </div>
-        </div>
-      </div>
+              </div>
+            </div>
 
       {/* Shift Tabs - Right Side, Above Performance */}
       {selectedLabId && labShifts.length > 0 && (
@@ -1411,76 +1411,149 @@ export default function AIInsightsPage() {
       {selectedLabId && (
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <h2 className="heading-inter heading-inter-sm text-gray-300 flex items-center gap-2">
               <ClockIcon className="w-5 h-5 text-sage-400" />
               Performance
             </h2>
-            <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
+            <span className="text-xs text-gray-400">{getDateRangeLabel(dateRange)}</span>
           </div>
 
           {loadingStats ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="flex items-center gap-2 text-sage-400 animate-pulse">
-                <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
-                <span className="font-medium">Loading performance data...</span>
-              </div>
+            // Loading skeleton
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-dark-bg border border-dark-border rounded p-4">
+                  <div className="h-4 bg-dark-border rounded w-20 mb-3 animate-pulse"></div>
+                  <div className="h-10 bg-dark-border rounded w-24 mb-2 animate-pulse"></div>
+                  <div className="h-3 bg-dark-border rounded w-32 animate-pulse"></div>
+                </div>
+              ))}
             </div>
           ) : maintenanceStats ? (
-            // Key Metrics Grid
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {/* Downtime Percentage */}
-            <div className="bg-dark-bg border border-dark-border rounded p-4">
-              <div className="text-gray-400 text-sm mb-1">Downtime</div>
-              <div className="text-3xl font-bold text-red-400">
-                {maintenanceStats.downtimePercentage.toFixed(1)}%
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                {formatDuration(maintenanceStats.totalDowntime)}
-              </div>
-                <ComparisonBadge 
-                  current={maintenanceStats.downtimePercentage} 
-                  previous={previousMonthStats?.downtimePercentage ?? null}
-                  isPercentage={true}
-                  lowerIsBetter={true}
-                />
-            </div>
+            (() => {
+              // Check if we have shift utilization data
+              if (selectedShift && shiftUtilization && shiftUtilization.totalScheduledHours > 0) {
+                const scheduledHours = shiftUtilization.totalScheduledHours || 0;
+                const productiveHours = shiftUtilization.totalProductiveHours || 0;
+                const idleHours = shiftUtilization.totalIdleHours || 0;
+                const downtimeHours = shiftUtilization.totalNonProductiveHours || 0;
+                
+                // Calculate percentages based on scheduled hours
+                const downtimePercentage = scheduledHours > 0 
+                  ? (downtimeHours / scheduledHours) * 100 
+                  : 0;
+                const uptimePercentage = scheduledHours > 0 
+                  ? ((idleHours + productiveHours) / scheduledHours) * 100 
+                  : 0;
+                
+                // Ensure total is exactly 100% (adjust uptime if needed due to rounding)
+                const totalPercentage = downtimePercentage + uptimePercentage;
+                const normalizedDowntimePercentage = downtimePercentage;
+                const normalizedUptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+                  ? 100 - downtimePercentage  // Ensure they add up to exactly 100%
+                  : uptimePercentage;
+                
+                // Calculate previous month percentages
+                let previousDowntimePercentage = null;
+                let previousUptimePercentage = null;
+                if (previousMonthShiftUtilization && previousMonthShiftUtilization.totalScheduledHours > 0) {
+                  const prevScheduled = previousMonthShiftUtilization.totalScheduledHours;
+                  const prevDowntime = previousMonthShiftUtilization.totalNonProductiveHours;
+                  const prevIdle = previousMonthShiftUtilization.totalIdleHours;
+                  const prevProductive = previousMonthShiftUtilization.totalProductiveHours;
+                  
+                  previousDowntimePercentage = (prevDowntime / prevScheduled) * 100;
+                  previousUptimePercentage = ((prevIdle + prevProductive) / prevScheduled) * 100;
+                  
+                  // Normalize previous percentages
+                  const prevTotal = previousDowntimePercentage + previousUptimePercentage;
+                  if (prevTotal > 0 && Math.abs(prevTotal - 100) > 0.1) {
+                    previousUptimePercentage = 100 - previousDowntimePercentage;
+                  }
+                }
+                
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                    {/* Downtime */}
+                    <div className="bg-dark-bg border border-dark-border rounded p-4">
+                      <div className="text-gray-400 text-sm mb-1">Downtime</div>
+                      <div className="text-3xl font-bold text-red-400">
+                        {normalizedDowntimePercentage.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {downtimeHours.toFixed(1)}h / {scheduledHours.toFixed(1)}h
+                      </div>
+                      {previousDowntimePercentage !== null && (
+                        <ComparisonBadge 
+                          current={normalizedDowntimePercentage} 
+                          previous={previousDowntimePercentage}
+                          isPercentage={true}
+                          lowerIsBetter={true}
+                        />
+                      )}
+                    </div>
 
-            {/* Uptime Percentage */}
-            <div className="bg-dark-bg border border-dark-border rounded p-4">
-              <div className="text-gray-400 text-sm mb-1">Uptime</div>
-              <div className="text-3xl font-bold text-sage-400">
-                {maintenanceStats.uptimePercentage.toFixed(1)}%
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                <TrendingUpIcon className="w-3 h-3 inline mr-1" />
-                Availability
-              </div>
-                <ComparisonBadge 
-                  current={maintenanceStats.uptimePercentage} 
-                  previous={previousMonthStats?.uptimePercentage ?? null}
-                  isPercentage={true}
-                  lowerIsBetter={false}
-                />
-            </div>
+                    {/* Uptime */}
+                    <div className="bg-dark-bg border border-dark-border rounded p-4">
+                      <div className="text-gray-400 text-sm mb-1">Uptime</div>
+                      <div className="text-3xl font-bold text-sage-400">
+                        {normalizedUptimePercentage.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {(idleHours + productiveHours).toFixed(1)}h (Idle + Productive) / {scheduledHours.toFixed(1)}h
+                      </div>
+                      {previousUptimePercentage !== null && (
+                        <ComparisonBadge 
+                          current={normalizedUptimePercentage} 
+                          previous={previousUptimePercentage}
+                          isPercentage={true}
+                          lowerIsBetter={false}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              } else {
+                // Fallback to maintenanceStats when no shift utilization data
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                    {/* Downtime */}
+                    <div className="bg-dark-bg border border-dark-border rounded p-4">
+                      <div className="text-gray-400 text-sm mb-1">Downtime</div>
+                      <div className="text-3xl font-bold text-red-400">
+                        {maintenanceStats.downtimePercentage.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {formatDuration(maintenanceStats.totalDowntime)}
+                      </div>
+                      <ComparisonBadge 
+                        current={maintenanceStats.downtimePercentage} 
+                        previous={previousMonthStats?.downtimePercentage ?? null}
+                        isPercentage={true}
+                        lowerIsBetter={true}
+                      />
+                    </div>
 
-            {/* Total Machines */}
-            <div className="bg-dark-bg border border-dark-border rounded p-4">
-              <div className="text-gray-400 text-sm mb-1">Total Machines</div>
-              <div className="text-3xl font-bold text-white">
-                {maintenanceStats.totalMachines}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Active machines in {selectedLab?.name || 'selected lab'}
-              </div>
-                <ComparisonBadge 
-                  current={maintenanceStats.totalMachines} 
-                  previous={previousMonthStats?.totalMachines ?? null}
-                  format={(val) => val.toFixed(0)}
-                  isPercentage={false}
-                  lowerIsBetter={false}
-                />
-              </div>
-            </div>
+                    {/* Uptime */}
+                    <div className="bg-dark-bg border border-dark-border rounded p-4">
+                      <div className="text-gray-400 text-sm mb-1">Uptime</div>
+                      <div className="text-3xl font-bold text-sage-400">
+                        {maintenanceStats.uptimePercentage.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {formatDuration(maintenanceStats.totalUptime)}
+                      </div>
+                      <ComparisonBadge 
+                        current={maintenanceStats.uptimePercentage} 
+                        previous={previousMonthStats?.uptimePercentage ?? null}
+                        isPercentage={true}
+                        lowerIsBetter={false}
+                      />
+                    </div>
+    </div>
+  );
+}
+            })()
           ) : null}
         </div>
       )}
@@ -1489,11 +1562,11 @@ export default function AIInsightsPage() {
       {selectedLabId && selectedShift && (
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <h2 className="heading-inter heading-inter-sm text-gray-300 flex items-center gap-2">
               <ChartIcon className="w-5 h-5 text-sage-400" />
               Shift Utilization - {formatShiftName(selectedShift)}
             </h2>
-            <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
+            <span className="text-xs text-gray-400">{getDateRangeLabel(dateRange)}</span>
           </div>
 
           {loadingShiftUtilization ? (
@@ -1507,99 +1580,126 @@ export default function AIInsightsPage() {
                 </div>
               ))}
             </div>
-          ) : shiftUtilization ? (
+          ) : shiftUtilization && shiftUtilization.totalScheduledHours > 0 ? (
             <>
-              {/* Key Metrics Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                {/* Average Utilization */}
-                <div className="bg-dark-bg border border-dark-border rounded p-4">
-                  <div className="text-gray-400 text-sm mb-1">Avg Utilization</div>
-                  <div className="text-3xl font-bold text-sage-400">
-                    {(shiftUtilization.averageUtilization || 0).toFixed(1)}%
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {shiftUtilization.machinesWithData || 0} of {shiftUtilization.totalMachines || 0} machines
-                  </div>
-                  <ComparisonBadge 
-                    current={shiftUtilization.averageUtilization || 0} 
-                    previous={previousMonthShiftUtilization?.averageUtilization ?? null}
-                    isPercentage={true}
-                    lowerIsBetter={false}
-                  />
-                </div>
+              {/* Calculate percentages */}
+              {(() => {
+                const scheduledHours = shiftUtilization.totalScheduledHours || 0;
+                const productiveHours = shiftUtilization.totalProductiveHours || 0;
+                const idleHours = shiftUtilization.totalIdleHours || 0;
+                const downtimeHours = shiftUtilization.totalNonProductiveHours || 0;
+                
+                // Calculate percentages based on scheduled hours
+                const downtimePercentage = scheduledHours > 0 
+                  ? (downtimeHours / scheduledHours) * 100 
+                  : 0;
+                const uptimePercentage = scheduledHours > 0 
+                  ? ((idleHours + productiveHours) / scheduledHours) * 100 
+                  : 0;
+                
+                // Ensure total is exactly 100% (adjust uptime if needed due to rounding)
+                const totalPercentage = downtimePercentage + uptimePercentage;
+                const normalizedDowntimePercentage = downtimePercentage;
+                const normalizedUptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+                  ? 100 - downtimePercentage  // Ensure they add up to exactly 100%
+                  : uptimePercentage;
+                
+                return (
+                  <>
+                    {/* Key Metrics Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                      {/* Average Utilization */}
+                      <div className="bg-dark-bg border border-dark-border rounded p-4">
+                        <div className="text-gray-400 text-sm mb-1">Avg Utilization</div>
+                        <div className="text-3xl font-bold text-sage-400">
+                          {(shiftUtilization.averageUtilization || 0).toFixed(1)}%
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {shiftUtilization.machinesWithData || 0} of {shiftUtilization.totalMachines || 0} machines
+                        </div>
+                        <ComparisonBadge 
+                          current={shiftUtilization.averageUtilization || 0} 
+                          previous={previousMonthShiftUtilization?.averageUtilization ?? null}
+                          isPercentage={true}
+                          lowerIsBetter={false}
+                        />
+                      </div>
 
-                {/* Productive Hours */}
-                <div className="bg-dark-bg border border-dark-border rounded p-4">
-                  <div className="text-gray-400 text-sm mb-1">Productive Hours</div>
-                  <div className="text-3xl font-bold text-green-400">
-                    {(shiftUtilization.totalProductiveHours || 0).toFixed(1)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Total hours
-                  </div>
-                  <ComparisonBadge 
-                    current={shiftUtilization.totalProductiveHours || 0} 
-                    previous={previousMonthShiftUtilization?.totalProductiveHours ?? null}
-                    format={(val) => val.toFixed(1)}
-                    isPercentage={false}
-                    lowerIsBetter={false}
-                  />
-                </div>
+                      {/* Productive Hours */}
+                      <div className="bg-dark-bg border border-dark-border rounded p-4">
+                        <div className="text-gray-400 text-sm mb-1">Productive Hours</div>
+                        <div className="text-3xl font-bold text-green-400">
+                          {(productiveHours || 0).toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Total hours
+                        </div>
+                        <ComparisonBadge 
+                          current={productiveHours || 0} 
+                          previous={previousMonthShiftUtilization?.totalProductiveHours ?? null}
+                          format={(val) => val.toFixed(1)}
+                          isPercentage={false}
+                          lowerIsBetter={false}
+                        />
+                      </div>
 
-                {/* Downtime Hours */}
-                <div className="bg-dark-bg border border-dark-border rounded p-4">
-                  <div className="text-gray-400 text-sm mb-1">Downtime Hours</div>
-                  <div className="text-3xl font-bold text-red-400">
-                    {(shiftUtilization.totalNonProductiveHours || 0).toFixed(1)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Total hours
-                  </div>
-                  <ComparisonBadge 
-                    current={shiftUtilization.totalNonProductiveHours || 0} 
-                    previous={previousMonthShiftUtilization?.totalNonProductiveHours ?? null}
-                    format={(val) => val.toFixed(1)}
-                    isPercentage={false}
-                    lowerIsBetter={true}
-                  />
-                </div>
+                      {/* Downtime Hours */}
+                      <div className="bg-dark-bg border border-dark-border rounded p-4">
+                        <div className="text-gray-400 text-sm mb-1">Downtime Hours</div>
+                        <div className="text-3xl font-bold text-red-400">
+                          {(downtimeHours || 0).toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Total hours
+                        </div>
+                        <ComparisonBadge 
+                          current={downtimeHours || 0} 
+                          previous={previousMonthShiftUtilization?.totalNonProductiveHours ?? null}
+                          format={(val) => val.toFixed(1)}
+                          isPercentage={false}
+                          lowerIsBetter={true}
+                        />
+                      </div>
 
-                {/* Idle Hours */}
-                <div className="bg-dark-bg border border-dark-border rounded p-4">
-                  <div className="text-gray-400 text-sm mb-1">Idle Hours</div>
-                  <div className="text-3xl font-bold text-yellow-400">
-                    {(shiftUtilization.totalIdleHours || 0).toFixed(1)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Total hours
-                  </div>
-                  <ComparisonBadge 
-                    current={shiftUtilization.totalIdleHours || 0} 
-                    previous={previousMonthShiftUtilization?.totalIdleHours ?? null}
-                    format={(val) => val.toFixed(1)}
-                    isPercentage={false}
-                    lowerIsBetter={false}
-                  />
-                </div>
+                      {/* Idle Hours */}
+                      <div className="bg-dark-bg border border-dark-border rounded p-4">
+                        <div className="text-gray-400 text-sm mb-1">Idle Hours</div>
+                        <div className="text-3xl font-bold text-yellow-400">
+                          {(idleHours || 0).toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Total hours
+                        </div>
+                        <ComparisonBadge 
+                          current={idleHours || 0} 
+                          previous={previousMonthShiftUtilization?.totalIdleHours ?? null}
+                          format={(val) => val.toFixed(1)}
+                          isPercentage={false}
+                          lowerIsBetter={false}
+                        />
+                      </div>
 
-                {/* Scheduled Hours */}
-                <div className="bg-dark-bg border border-dark-border rounded p-4">
-                  <div className="text-gray-400 text-sm mb-1">Scheduled Hours</div>
-                  <div className="text-3xl font-bold text-white">
-                    {(shiftUtilization.totalScheduledHours || 0).toFixed(1)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Total hours
-                  </div>
-                  <ComparisonBadge 
-                    current={shiftUtilization.totalScheduledHours || 0} 
-                    previous={previousMonthShiftUtilization?.totalScheduledHours ?? null}
-                    format={(val) => val.toFixed(1)}
-                    isPercentage={false}
-                    lowerIsBetter={false}
-                  />
-                </div>
-              </div>
+                      {/* Scheduled Hours */}
+                      <div className="bg-dark-bg border border-dark-border rounded p-4">
+                        <div className="text-gray-400 text-sm mb-1">Scheduled Hours</div>
+                        <div className="text-3xl font-bold text-gray-300">
+                          {(scheduledHours || 0).toFixed(1)}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Total hours
+                        </div>
+                        <ComparisonBadge 
+                          current={scheduledHours || 0} 
+                          previous={previousMonthShiftUtilization?.totalScheduledHours ?? null}
+                          format={(val) => val.toFixed(1)}
+                          isPercentage={false}
+                          lowerIsBetter={false}
+                        />
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Machine-wise Utilization Table */}
               {shiftUtilization.machineUtilizations && shiftUtilization.machineUtilizations.length > 0 && (
@@ -1622,21 +1722,17 @@ export default function AIInsightsPage() {
                           <tr key={index} className="border-b border-dark-border/50 hover:bg-dark-bg/50">
                             <td className="py-2 px-4 text-gray-300 text-sm">{machine.machineName}</td>
                             <td className="py-2 px-4 text-right text-sm">
-                              <span className={`font-semibold ${
-                                machine.averageUtilization >= 70 ? 'text-green-400' :
-                                machine.averageUtilization >= 50 ? 'text-yellow-400' :
-                                'text-red-400'
-                              }`}>
+                              <span className="font-semibold text-sage-400">
                                 {machine.averageUtilization.toFixed(1)}%
                               </span>
                             </td>
-                            <td className="py-2 px-4 text-right text-gray-300 text-sm">
+                            <td className="py-2 px-4 text-right text-green-400 text-sm font-medium">
                               {machine.totalProductiveHours.toFixed(1)}h
                             </td>
                             <td className="py-2 px-4 text-right text-red-400 text-sm font-medium">
                               {machine.totalNonProductiveHours.toFixed(1)}h
                             </td>
-                            <td className="py-2 px-4 text-right text-gray-300 text-sm">
+                            <td className="py-2 px-4 text-right text-yellow-400 text-sm font-medium">
                               {machine.totalIdleHours.toFixed(1)}h
                             </td>
                             <td className="py-2 px-4 text-right text-gray-300 text-sm">
@@ -1651,8 +1747,13 @@ export default function AIInsightsPage() {
               )}
             </>
           ) : (
-            <div className="text-center py-8 text-gray-400">
-              No utilization data available for this shift
+            <div className="py-8 text-center">
+              <div className="text-gray-400 text-sm">
+                Shift Utilization not found for {formatShiftName(selectedShift)}
+              </div>
+              <div className="text-xs text-gray-400 mt-2">
+                No utilization data available for the selected shift and date range
+              </div>
             </div>
           )}
         </div>
@@ -1662,11 +1763,11 @@ export default function AIInsightsPage() {
       {selectedLabId && (
         <div className="mt-4 bg-dark-panel border border-dark-border rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
+            <h2 className="heading-inter heading-inter-sm text-gray-300 flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-sage-400" />
               Events
             </h2>
-            <span className="text-xs text-gray-500">{getDateRangeLabel(dateRange)}</span>
+            <span className="text-xs text-gray-400">{getDateRangeLabel(dateRange)}</span>
           </div>
 
           {loadingStats || loadingAlerts || loadingDowntimeIncidents ? (
@@ -1685,10 +1786,10 @@ export default function AIInsightsPage() {
             {/* Scheduled Maintenance */}
             <div className="bg-dark-bg border border-dark-border rounded p-4">
               <div className="text-gray-400 text-sm mb-1">Scheduled Maintenance</div>
-              <div className="text-3xl font-bold text-white">
+              <div className="text-3xl font-bold text-gray-300">
                 {maintenanceStats.scheduledMaintenanceCount}
               </div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-gray-400 mt-1">
                 Work orders
               </div>
             </div>
@@ -1699,7 +1800,7 @@ export default function AIInsightsPage() {
                   <div className="text-3xl font-bold text-yellow-400">
                     {alertsCount}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-400 mt-1">
                     Alert events
                   </div>
                   <ComparisonBadge 
@@ -1717,7 +1818,7 @@ export default function AIInsightsPage() {
                   <div className="text-3xl font-bold text-red-400">
                     {downtimeIncidentsCount}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-400 mt-1">
                     {downtimeIncidentsCount === 1 ? 'incident' : 'incidents'}
                   </div>
                   <ComparisonBadge 
