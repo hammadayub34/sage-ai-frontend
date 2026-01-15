@@ -39,7 +39,39 @@ export default function ShopfloorsPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [fetchingLastSeen, setFetchingLastSeen] = useState<Set<string>>(new Set());
+
+  // Format last seen time for display (same as Monitoring page)
+  const formatLastSeenTime = (isoString: string | null) => {
+    if (!isoString) return 'N/A';
+    
+    const now = new Date();
+    const lastSeen = new Date(isoString);
+    const diffMs = now.getTime() - lastSeen.getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffSeconds < 60) {
+      return `${diffSeconds} second${diffSeconds !== 1 ? 's' : ''} ago`;
+    } else if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    } else if (diffDays < 7) {
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    } else {
+      return lastSeen.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+  };
 
   // Check if user is logged in and get user data
   useEffect(() => {
@@ -108,26 +140,101 @@ export default function ShopfloorsPage() {
           lastSeen: null, // Will be populated asynchronously
         })));
         
-        // Fetch last seen timestamps asynchronously (don't block UI)
+        // Mark all machines as fetching last seen
+        setFetchingLastSeen(new Set(machinesList.map((m: Machine) => m._id)));
+        
+        // Fetch last seen timestamps from vibration data (same as Monitoring page)
         Promise.all(
           machinesList.map(async (machine: Machine) => {
             try {
-              const lastSeenResponse = await fetch(`/api/influxdb/last-seen?machineId=${machine._id}`);
-              if (lastSeenResponse.ok) {
-                const lastSeenData = await lastSeenResponse.json();
-                // Update the specific machine's last seen timestamp
-                setMachines(prev => prev.map(m => 
-                  m._id === machine._id 
-                    ? { ...m, lastSeen: lastSeenData.lastSeen || null }
-                    : m
-                ));
+              // Fetch vibration data to get latest timestamp (same approach as VibrationChart)
+              const vibrationResponse = await fetch(`/api/influxdb/vibration?machineId=${encodeURIComponent(machine._id)}&timeRange=-365d&windowPeriod=raw&axis=vibration`);
+              
+              if (vibrationResponse.ok) {
+                const vibrationData = await vibrationResponse.json();
+                if (vibrationData.data && Array.isArray(vibrationData.data) && vibrationData.data.length > 0) {
+                  // Find the latest timestamp from all data points (same as VibrationChart)
+                  let latestTime: Date | null = null;
+                  vibrationData.data.forEach((point: { time: string; value: number }) => {
+                    try {
+                      const pointTime = new Date(point.time);
+                      if (!isNaN(pointTime.getTime())) {
+                        if (latestTime === null || pointTime.getTime() > latestTime.getTime()) {
+                          latestTime = pointTime;
+                        }
+                      }
+                    } catch (e) {
+                      // Skip invalid dates
+                    }
+                  });
+                  
+                  if (latestTime) {
+                    // Update the specific machine's last seen timestamp
+                    setMachines(prev => prev.map((m: Machine) => 
+                      m._id === machine._id 
+                        ? { ...m, lastSeen: latestTime!.toISOString() }
+                        : m
+                    ));
+                    // Remove from fetching set
+                    setFetchingLastSeen(prev => {
+                      const newSet = new Set(prev);
+                      newSet.delete(machine._id);
+                      return newSet;
+                    });
+                    return;
+                  }
+                }
               }
+              
+              // If no vibration data found, try with machine name
+              const vibrationResponseByName = await fetch(`/api/influxdb/vibration?machineId=${encodeURIComponent(machine.machineName)}&timeRange=-365d&windowPeriod=raw&axis=vibration`);
+              if (vibrationResponseByName.ok) {
+                const vibrationDataByName = await vibrationResponseByName.json();
+                if (vibrationDataByName.data && Array.isArray(vibrationDataByName.data) && vibrationDataByName.data.length > 0) {
+                  let latestTime: Date | null = null;
+                  vibrationDataByName.data.forEach((point: { time: string; value: number }) => {
+                    try {
+                      const pointTime = new Date(point.time);
+                      if (!isNaN(pointTime.getTime())) {
+                        if (latestTime === null || pointTime.getTime() > latestTime.getTime()) {
+                          latestTime = pointTime;
+                        }
+                      }
+                    } catch (e) {
+                      // Skip invalid dates
+                    }
+                  });
+                  
+                  if (latestTime) {
+                    setMachines(prev => prev.map((m: Machine) => 
+                      m._id === machine._id 
+                        ? { ...m, lastSeen: latestTime!.toISOString() }
+                        : m
+                    ));
+                  }
+                }
+              }
+              
+              // Remove from fetching set (even if no data found)
+              setFetchingLastSeen(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(machine._id);
+                return newSet;
+              });
             } catch (error) {
-              console.error(`Error fetching last seen for machine ${machine._id}:`, error);
+              console.error(`Error fetching last seen for machine ${machine.machineName} (${machine._id}):`, error);
+              // Remove from fetching set on error
+              setFetchingLastSeen(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(machine._id);
+                return newSet;
+              });
             }
           })
         ).catch(error => {
           console.error('Error fetching last seen timestamps:', error);
+          // Clear all fetching states on error
+          setFetchingLastSeen(new Set());
         });
       } else {
         toast.error('Failed to fetch machines');
@@ -246,32 +353,16 @@ export default function ShopfloorsPage() {
                 key={machine._id}
                 className="bg-dark-panel border border-dark-border rounded-lg p-3 hover:border-sage-500/50 transition-all"
               >
-                <div className="flex items-start justify-between mb-2">
+                <div className="mb-2">
                   <div className="flex-1">
                     <h3 className="text-sm font-medium text-white mb-1 line-clamp-2">{machine.machineName}</h3>
                     {machine.description && (
-                      <p className="text-xs text-gray-400 line-clamp-1">{machine.description}</p>
+                      <p className="text-xs text-gray-400 line-clamp-1 mb-1">{machine.description}</p>
                     )}
-                    {machine.lastSeen && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Last seen: {new Date(machine.lastSeen).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      <span className={`text-gray-500 ${fetchingLastSeen.has(machine._id) ? 'animate-pulse' : ''}`}>Last seen:</span> {fetchingLastSeen.has(machine._id) ? '' : formatLastSeenTime(machine.lastSeen || null)}
+                    </p>
                   </div>
-                  <span
-                    className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded flex-shrink-0 ${
-                      machine.status === 'active'
-                        ? 'bg-sage-500/20 text-sage-400 border border-sage-500/30'
-                        : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                    }`}
-                  >
-                    {machine.status}
-                  </span>
                 </div>
                 
                 <div className="mt-auto">
@@ -325,43 +416,34 @@ export default function ShopfloorsPage() {
             {machines.map((machine) => (
               <div
                 key={machine._id}
-                className="bg-dark-panel border border-dark-border rounded-lg p-3 hover:border-sage-500/50 transition-all aspect-[4/3] flex flex-col"
+                className="bg-dark-panel border border-dark-border rounded-lg p-3 hover:border-sage-500/50 transition-all aspect-[4/3] flex flex-col relative"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-white line-clamp-2">{machine.machineName}</h3>
-                    {machine.lastSeen && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Last seen: {new Date(machine.lastSeen).toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    )}
+                <div className="flex-1 flex flex-col min-h-0 mb-16">
+                  <div className="mb-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-white line-clamp-2">{machine.machineName}</h3>
+                      {machine.description && (
+                        <p className="text-xs text-gray-400 mt-1 mb-1 line-clamp-1">{machine.description}</p>
+                      )}
+                      {fetchingLastSeen.has(machine._id) ? (
+                        <p className="text-xs text-gray-400 mt-1">
+                          <span className={`text-gray-500 ${fetchingLastSeen.has(machine._id) ? 'animate-pulse' : ''}`}>Last seen:</span> {fetchingLastSeen.has(machine._id) ? '' : formatLastSeenTime(machine.lastSeen || null)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 mt-1">
+                          <span className="text-gray-500">Last seen:</span> {formatLastSeenTime(machine.lastSeen || null)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <span
-                    className={`inline-flex px-1.5 py-0.5 text-xs font-medium rounded flex-shrink-0 ${
-                      machine.status === 'active'
-                        ? 'bg-sage-500/20 text-sage-400 border border-sage-500/30'
-                        : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                    }`}
-                  >
-                    {machine.status}
-                  </span>
                 </div>
                 
-                {machine.description && (
-                  <p className="text-xs text-gray-400 mb-2 line-clamp-1">{machine.description}</p>
-                )}
-                
-                <div className="mt-auto">
+                <div className="absolute bottom-3 left-3 right-3 pt-2 border-t border-dark-border">
                   <div className="text-xs font-medium text-gray-300 mb-1.5">
                     Nodes {machine.nodes && machine.nodes.length > 0 && `(${machine.nodes.length})`}
                   </div>
                   {machine.nodes && machine.nodes.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 overflow-y-auto max-h-24">
+                    <div className="flex flex-wrap gap-1 overflow-y-auto max-h-20">
                       {machine.nodes.slice(0, 3).map((node, idx) => {
                         const getSensorTypeColor = (sensorType: string | null) => {
                           if (!sensorType) return 'text-gray-500 bg-gray-500/20';
@@ -375,22 +457,27 @@ export default function ShopfloorsPage() {
                         };
                         
                         return (
-                        <div
-                          key={idx}
+                          <div
+                            key={idx}
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-dark-bg border border-dark-border rounded text-xs hover:border-sage-500/50 transition-all cursor-default"
-                        >
+                          >
                             <span className="font-mono text-white text-xs">{node.mac}</span>
-                              {node.sensorType && (
-                              <span className={`font-semibold px-1 py-0.5 rounded text-xs ${getSensorTypeColor(node.sensorType)}`}>
+                            {node.nodeType && (
+                              <span className="text-xs text-sage-400 font-medium bg-sage-500/10 px-1 py-0.5 rounded">
+                                {node.nodeType}
+                              </span>
+                            )}
+                            {node.sensorType && (
+                              <span className={`text-xs font-semibold px-1 py-0.5 rounded ${getSensorTypeColor(node.sensorType)}`}>
                                 {node.sensorType.split(' ')[0]}
                               </span>
-                              )}
-                            </div>
+                            )}
+                          </div>
                         );
                       })}
                       {machine.nodes.length > 3 && (
                         <span className="text-xs text-gray-500">+{machine.nodes.length - 3}</span>
-                          )}
+                      )}
                     </div>
                   ) : (
                     <span className="text-gray-500 text-xs">No nodes</span>
