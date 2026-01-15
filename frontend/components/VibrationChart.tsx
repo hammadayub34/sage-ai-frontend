@@ -16,10 +16,10 @@ type VibrationAxis = 'vibration' | 'x_vibration' | 'y_vibration' | 'x_acc' | 'y_
 const AXIS_COLORS: Record<VibrationAxis, string> = {
   vibration: '#437874', // Sage green (overall) - matches app theme
   x_vibration: '#4b5563', // Slate gray-blue (X-axis vibration)
-  y_vibration: '#10b981', // Green (Y-axis vibration)
+  y_vibration: '#a78bfa', // Muted lavender/purple (Y-axis vibration)
   x_acc: '#4b5563', // Slate gray-blue (X acceleration)
-  y_acc: '#f59e0b', // Orange (Y acceleration)
-  z_acc: '#10b981', // Green (Z acceleration)
+  y_acc: '#437874', // Sage green (Y acceleration)
+  z_acc: '#a78bfa', // Muted lavender/purple (Z acceleration)
 };
 
 const AXIS_LABELS: Record<VibrationAxis, string> = {
