@@ -30,6 +30,7 @@ interface MonitoringAnalysisRequest {
   vibrationAxesAvailable?: string[];
   vibrationTimeRange?: string | null;
   chartType?: string;
+  scheduledHours?: number; // Scheduled hours from MongoDB shift utilization
 }
 
 export async function POST(request: NextRequest) {
@@ -56,8 +57,22 @@ export async function POST(request: NextRequest) {
     const downtimeFormatted = formatDuration(data.totalDowntime);
     const uptimeFormatted = formatDuration(data.totalUptime);
 
+    // Format scheduled hours if available
+    const formatScheduledHours = (hours: number): string => {
+      const days = Math.floor(hours / 24);
+      const remainingHours = Math.floor(hours % 24);
+      if (days > 0) {
+        return `${days} day${days > 1 ? 's' : ''}, ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
+      } else {
+        return `${hours.toFixed(1)} hour${hours !== 1 ? 's' : ''}`;
+      }
+    };
+
     // Build additional metrics context
     let additionalMetrics = '';
+    if (data.scheduledHours !== undefined && data.scheduledHours > 0) {
+      additionalMetrics += `\n- Scheduled Hours: ${formatScheduledHours(data.scheduledHours)}`;
+    }
     if (data.alertsCount !== undefined) {
       additionalMetrics += `\n- Total Alerts (Last 24h): ${data.alertsCount}`;
     }
@@ -127,7 +142,7 @@ Machine Performance Data:
 Performance Metrics:
 - Downtime: ${data.downtimePercentage.toFixed(2)}% (${downtimeFormatted})
 - Uptime: ${data.uptimePercentage.toFixed(2)}% (${uptimeFormatted})
-- Downtime Incidents: ${data.incidentCount}${additionalMetrics}
+- Downtime Incidents: ${data.incidentCount}${data.scheduledHours !== undefined && data.scheduledHours > 0 ? `\n- Scheduled Hours: ${formatScheduledHours(data.scheduledHours)}` : ''}${additionalMetrics}
 
 Please provide a structured analysis with 2-3 clear sections. Format your response as follows:
 
@@ -135,7 +150,7 @@ Please provide a structured analysis with 2-3 clear sections. Format your respon
 Start by clearly stating: "The ${data.machineName} at ${data.labName}..." and provide a brief summary including:
 - Downtime: ${data.downtimePercentage.toFixed(2)}%
 - Uptime: ${data.uptimePercentage.toFixed(2)}%
-- Downtime Incidents: ${data.incidentCount}
+- Downtime Incidents: ${data.incidentCount}${data.scheduledHours !== undefined && data.scheduledHours > 0 ? `\n- Scheduled Hours: ${formatScheduledHours(data.scheduledHours)}` : ''}
 - Time Period: ${data.timeRange}
 
 **Key Observations**
