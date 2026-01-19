@@ -496,10 +496,15 @@ export default function Dashboard() {
 
   // Fetch monitoring analysis
   const fetchMonitoringAnalysis = async () => {
-    if (!selectedMachineId || !downtimeData || !selectedLabId) {
+    // Check if we have either MongoDB data or InfluxDB data
+    const hasMongoData = shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0;
+    const hasInfluxData = downtimeData && (downtimeData.downtimePercentage !== undefined || downtimeData.totalDowntime !== undefined);
+    
+    if (!selectedMachineId || !selectedLabId || (!hasMongoData && !hasInfluxData)) {
       console.log('[Monitoring Analysis] Missing required data:', {
         selectedMachineId,
-        downtimeData: !!downtimeData,
+        hasMongoData,
+        hasInfluxData,
         selectedLabId
       });
       return;
@@ -593,15 +598,76 @@ export default function Dashboard() {
         return rangeMap[range] || range;
       };
 
+      // Calculate performance values from MongoDB data if available, otherwise use InfluxDB data
+      let downtimePercentage: number;
+      let uptimePercentage: number;
+      let totalDowntime: number;
+      let totalUptime: number;
+      let incidentCount: number;
+      let scheduledHours: number | undefined;
+
+      if (shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0) {
+        // Use MongoDB data - EXACT SAME CALCULATION AS PERFORMANCE SECTION
+        const scheduledHoursValue = shiftUtilizationData.totalScheduledHours;
+        const downtimeHours = shiftUtilizationData.totalNonProductiveHours;
+        const productiveHours = shiftUtilizationData.totalProductiveHours;
+        const idleHours = shiftUtilizationData.totalIdleHours;
+        
+        // Calculate percentages (same as DowntimeStats component)
+        const calculatedDowntimePercentage = (downtimeHours / scheduledHoursValue) * 100;
+        const calculatedUptimePercentage = ((idleHours + productiveHours) / scheduledHoursValue) * 100;
+        
+        // Ensure total is exactly 100% (same normalization logic as Performance section)
+        const totalPercentage = calculatedDowntimePercentage + calculatedUptimePercentage;
+        downtimePercentage = calculatedDowntimePercentage;
+        uptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+          ? 100 - calculatedDowntimePercentage
+          : calculatedUptimePercentage;
+        
+        // Convert hours to seconds for API consistency
+        totalDowntime = downtimeHours * 3600;
+        totalUptime = (idleHours + productiveHours) * 3600;
+        
+        // Incident count not available from shift utilization, use 0
+        incidentCount = 0;
+        scheduledHours = scheduledHoursValue;
+        
+        console.log('[Monitoring Analysis] Using MongoDB data (matching Performance section):', {
+          scheduledHours: scheduledHoursValue,
+          downtimeHours,
+          productiveHours,
+          idleHours,
+          downtimePercentage: downtimePercentage.toFixed(2),
+          uptimePercentage: uptimePercentage.toFixed(2),
+          calculatedDowntimePercentage: calculatedDowntimePercentage.toFixed(2),
+          calculatedUptimePercentage: calculatedUptimePercentage.toFixed(2),
+          totalPercentage: totalPercentage.toFixed(2),
+        });
+      } else {
+        // Fallback to InfluxDB data
+        downtimePercentage = downtimeData?.downtimePercentage || 0;
+        uptimePercentage = downtimeData?.uptimePercentage || 0;
+        totalDowntime = downtimeData?.totalDowntime || 0;
+        totalUptime = downtimeData?.totalUptime || 0;
+        incidentCount = downtimeData?.incidentCount || 0;
+        scheduledHours = undefined;
+        
+        console.log('[Monitoring Analysis] Using InfluxDB fallback data:', {
+          downtimePercentage: downtimePercentage.toFixed(2),
+          uptimePercentage: uptimePercentage.toFixed(2),
+          incidentCount,
+        });
+      }
+
       const requestBody = {
         machineName: machineName,
         machineId: selectedMachineId,
         labName: labName,
-        downtimePercentage: downtimeData.downtimePercentage || 0,
-        uptimePercentage: downtimeData.uptimePercentage || 0,
-        totalDowntime: downtimeData.totalDowntime || 0,
-        totalUptime: downtimeData.totalUptime || 0,
-        incidentCount: downtimeData.incidentCount || 0,
+        downtimePercentage,
+        uptimePercentage,
+        totalDowntime,
+        totalUptime,
+        incidentCount,
         timeRange: formatTimeRange(`-${selectedTimeRange}`),
         alertsCount,
         alarmBreakdown,
@@ -613,6 +679,7 @@ export default function Dashboard() {
         vibrationAxesAvailable,
         vibrationTimeRange: vibrationTimeRange ? formatVibrationTimeRange(vibrationTimeRange) : null,
         chartType: isCNCMachineA ? chartTab : (chartTab === 'vibration' ? 'vibration' : 'current'),
+        scheduledHours,
       };
 
       const response = await fetch('/api/monitoring/analysis', {
@@ -671,11 +738,14 @@ export default function Dashboard() {
 
   // Auto-fetch analysis when machine and data are available
   useEffect(() => {
-    if (selectedMachineId && selectedLabId && downtimeData && !loadingMonitoringAnalysis) {
+    const hasMongoData = shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0;
+    const hasInfluxData = downtimeData && (downtimeData.downtimePercentage !== undefined || downtimeData.totalDowntime !== undefined);
+    
+    if (selectedMachineId && selectedLabId && (hasMongoData || hasInfluxData) && !loadingMonitoringAnalysis) {
       fetchMonitoringAnalysis();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMachineId, selectedLabId, selectedTimeRange, downtimeData, alarmHistoryData, workOrders, vibrationDataOverall, chartTab]);
+  }, [selectedMachineId, selectedLabId, selectedTimeRange, shiftUtilizationData, downtimeData, alarmHistoryData, workOrders, vibrationDataOverall, chartTab]);
   
   const handleRefresh = () => {
     // Invalidate all queries to force refresh
