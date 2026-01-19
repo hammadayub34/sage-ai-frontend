@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log(`[Last Seen API] Querying for machineId: ${machineId}`);
+
     // Query multiple buckets/measurements to find the latest timestamp
     const queries = [
       // Vibration data
@@ -106,6 +108,7 @@ export async function GET(request: NextRequest) {
           const recordTime = new Date(results[0]._time as string);
           if (!latestTime || recordTime > latestTime) {
             latestTime = recordTime;
+            console.log(`[Last Seen API] Found data in bucket ${bucket}: ${recordTime.toISOString()}`);
           }
         }
       } catch (error) {
@@ -114,11 +117,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const result = {
       success: true,
       machineId,
       lastSeen: latestTime ? latestTime.toISOString() : null,
-    });
+    };
+    
+    console.log(`[Last Seen API] Result for ${machineId}:`, result.lastSeen ? `Found: ${result.lastSeen}` : 'Not found');
+    
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error('[Last Seen API] Error:', error);
     return NextResponse.json(

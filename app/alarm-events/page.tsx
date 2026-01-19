@@ -18,6 +18,26 @@ interface Alert {
   value: boolean;
 }
 
+interface Notification {
+  _id: string;
+  userId: string;
+  type: string;
+  time: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  actions?: string[];
+  color?: string;
+  bg?: string;
+  read: boolean;
+  sensorType?: string;
+  reportId?: string;
+  sent: boolean;
+  labId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Lab {
   _id: string;
   name: string;
@@ -41,6 +61,8 @@ export default function AlarmEventsPage() {
   const [selectedState, setSelectedState] = useState<string>('');
   const [timeRange, setTimeRange] = useState<string>('7d');
   const [expandedAlerts, setExpandedAlerts] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'alarms' | 'notifications'>('notifications');
+  const [readFilter, setReadFilter] = useState<string>(''); // 'read', 'unread', or '' for all
 
   // Check if user is logged in
   useEffect(() => {
@@ -109,12 +131,8 @@ export default function AlarmEventsPage() {
       }
       const data = await response.json();
       setMachines(data.machines || []);
-      // Auto-select first machine if available
-      if (data.machines && data.machines.length > 0) {
-        setSelectedMachineId(data.machines[0]._id);
-      } else {
-        setSelectedMachineId('');
-      }
+      // Don't auto-select machine - default to "All" (empty)
+      setSelectedMachineId('');
     } catch (error: any) {
       console.error('Error fetching machines:', error);
       toast.error('Failed to load machines');
@@ -132,6 +150,7 @@ export default function AlarmEventsPage() {
     setSelectedMachineId(e.target.value);
   };
 
+  // Fetch alarm events
   const { data, isLoading, error, refetch } = useQuery<{ alerts: Alert[] }>({
     queryKey: ['alarm-events', selectedMachineId, selectedState, timeRange],
     queryFn: async () => {
@@ -167,6 +186,59 @@ export default function AlarmEventsPage() {
       return response.json();
     },
     refetchInterval: 60000, // Refetch every 60 seconds
+    enabled: viewMode === 'alarms',
+  });
+
+  // Fetch notifications from MongoDB
+  const { data: notificationsData, isLoading: loadingNotifications, refetch: refetchNotifications } = useQuery<{ notifications: Notification[]; count: number; total: number }>({
+    queryKey: ['notifications', user?._id, selectedLabId, selectedMachineId, readFilter, timeRange],
+    queryFn: async () => {
+      if (!user?._id) return { notifications: [], count: 0, total: 0 };
+      
+      const params = new URLSearchParams();
+      params.append('userId', user._id);
+      if (selectedLabId) {
+        params.append('labId', selectedLabId);
+      }
+      // Filter by machine name if machine is selected
+      if (selectedMachineId && viewMode === 'notifications') {
+        const selectedMachine = machines.find(m => m._id === selectedMachineId);
+        if (selectedMachine) {
+          params.append('machineName', selectedMachine.machineName);
+        }
+      }
+      if (readFilter) {
+        params.append('read', readFilter === 'read' ? 'true' : 'false');
+      }
+      params.append('limit', '500');
+      
+      // Calculate date range
+      const now = new Date();
+      let startDate: Date;
+      switch (timeRange) {
+        case '24h':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      }
+      params.append('startDate', startDate.toISOString());
+      params.append('endDate', now.toISOString());
+
+      const response = await fetch(`/api/notifications?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch notifications');
+      }
+      return response.json();
+    },
+    refetchInterval: 60000, // Refetch every 60 seconds
+    enabled: viewMode === 'notifications' && !!user?._id,
   });
 
   const alerts = data?.alerts || [];
@@ -204,13 +276,13 @@ export default function AlarmEventsPage() {
     return machineId.startsWith('lathe') ? 'lathe' : 'bottlefiller';
   };
 
-  const toggleExpand = (alert: Alert, alertKey: string) => {
+  const toggleExpand = (item: Alert | Notification, itemKey: string) => {
     setExpandedAlerts(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(alertKey)) {
-        newSet.delete(alertKey);
+      if (newSet.has(itemKey)) {
+        newSet.delete(itemKey);
       } else {
-        newSet.add(alertKey);
+        newSet.add(itemKey);
       }
       return newSet;
     });
@@ -225,6 +297,30 @@ export default function AlarmEventsPage() {
             <NotificationIcon className="w-8 h-8 text-sage-400" />
             <h1 className="heading-inter heading-inter-lg">Notifications</h1>
           </div>
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={() => setViewMode('notifications')}
+            className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+              viewMode === 'notifications'
+                ? 'bg-sage-500 text-white'
+                : 'bg-dark-panel text-gray-400 hover:text-white border border-dark-border'
+            }`}
+          >
+            Notifications
+          </button>
+          <button
+            onClick={() => setViewMode('alarms')}
+            className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+              viewMode === 'alarms'
+                ? 'bg-sage-500 text-white'
+                : 'bg-dark-panel text-gray-400 hover:text-white border border-dark-border'
+            }`}
+          >
+            Alarm Events
+          </button>
         </div>
 
         {/* Shopfloor/Lab, Machine, State, and Time Range Selection */}
@@ -254,7 +350,7 @@ export default function AlarmEventsPage() {
             disabled={loading || !selectedLabId || machines.length === 0}
           >
             <option value="">
-              {!selectedLabId ? 'Select a lab first...' : loading ? 'Loading machines...' : machines.length === 0 ? 'No machines in this lab' : 'Select a machine...'}
+              {!selectedLabId ? 'Select a lab first...' : loading ? 'Loading machines...' : machines.length === 0 ? 'No machines in this lab' : 'All'}
             </option>
             {machines.map((machine) => (
               <option key={machine._id} value={machine._id}>
@@ -263,16 +359,33 @@ export default function AlarmEventsPage() {
             ))}
           </select>
 
-          <label className="text-gray-400">State:</label>
-          <select
-            value={selectedState}
-            onChange={(e) => setSelectedState(e.target.value)}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[150px]"
-          >
-            <option value="">All</option>
-            <option value="RAISED">Raised</option>
-            <option value="CLEARED">Cleared</option>
-          </select>
+          {viewMode === 'alarms' ? (
+            <>
+              <label className="text-gray-400">State:</label>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[150px]"
+              >
+                <option value="">All</option>
+                <option value="RAISED">Raised</option>
+                <option value="CLEARED">Cleared</option>
+              </select>
+            </>
+          ) : (
+            <>
+              <label className="text-gray-400">Status:</label>
+              <select
+                value={readFilter}
+                onChange={(e) => setReadFilter(e.target.value)}
+                className="bg-dark-panel border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500 min-w-[150px]"
+              >
+                <option value="">All</option>
+                <option value="unread">Unread</option>
+                <option value="read">Read</option>
+              </select>
+            </>
+          )}
 
           <label className="text-gray-400">Time Range:</label>
           <select
@@ -289,97 +402,212 @@ export default function AlarmEventsPage() {
 
       {/* Main Content - List */}
       <div>
-        {/* Alarm Events List */}
-        <div className="w-full">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-              <span className="ml-3 text-gray-400">Loading events...</span>
-            </div>
-          ) : error ? (
-            <div className="p-8 bg-dark-panel border border-dark-border rounded text-center">
-              <p className="text-red-400">Error loading alarm events</p>
-            </div>
-          ) : filteredAlerts.length === 0 ? (
-            <div className="p-8 bg-dark-panel border border-dark-border rounded text-center">
-              <p className="text-gray-400">No events found</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredAlerts.map((alert, idx) => {
-                const alertKey = `${alert.timestamp}-${idx}`;
-                const isExpanded = expandedAlerts.has(alertKey);
-                return (
-                  <div
-                    key={alertKey}
-                    className="bg-dark-panel border border-dark-border rounded-lg hover:border-midnight-300 transition-colors"
-                  >
-                    {/* Header - Clickable */}
+        {viewMode === 'notifications' ? (
+          /* MongoDB Notifications List */
+          <div className="w-full">
+            {loadingNotifications ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                <span className="ml-3 text-gray-400">Loading notifications...</span>
+              </div>
+            ) : !notificationsData ? (
+              <div className="p-8 bg-dark-panel border border-dark-border rounded text-center">
+                <p className="text-gray-400">No notifications found</p>
+              </div>
+            ) : notificationsData.notifications.length === 0 ? (
+              <div className="p-8 bg-dark-panel border border-dark-border rounded text-center">
+                <p className="text-gray-400">No notifications found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {notificationsData.notifications.map((notification) => {
+                  const notificationKey = notification._id;
+                  const isExpanded = expandedAlerts.has(notificationKey);
+                  return (
                     <div
-                      className="p-6 cursor-pointer"
-                      onClick={() => toggleExpand(alert, alertKey)}
+                      key={notificationKey}
+                      className={`bg-dark-panel border rounded-lg hover:border-sage-500/50 transition-colors ${
+                        !notification.read ? 'border-sage-500/30' : 'border-dark-border'
+                      }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            {isExpanded ? (
-                              <ChevronDownIcon className="w-4 h-4 text-gray-400" />
-                            ) : (
-                              <ChevronRightIcon className="w-4 h-4 text-gray-400" />
-                            )}
-                            <h3 className="text-white font-semibold text-lg">
-                              {formatAlarmName(alert.alarm_type)}
-                            </h3>
-                            <span
-                              className={`px-2 py-1 rounded text-xs font-medium border ${
-                                alert.state === 'RAISED'
-                                  ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                                  : 'bg-sage-500/20 text-sage-400 border-sage-500/30'
-                              }`}
-                            >
-                              {alert.state}
-                            </span>
+                      {/* Header - Clickable */}
+                      <div
+                        className="p-6 cursor-pointer"
+                        onClick={() => {
+                          toggleExpand(notification, notificationKey);
+                          // Mark as read when clicked
+                          if (!notification.read) {
+                            fetch(`/api/notifications`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ notificationId: notification._id, read: true }),
+                            }).then(() => refetchNotifications());
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              {isExpanded ? (
+                                <ChevronDownIcon className="w-4 h-4 text-gray-400" />
+                              ) : (
+                                <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+                              )}
+                              <h3 className="text-gray-300 font-semibold text-lg">
+                                {notification.title}
+                              </h3>
+                              {!notification.read && (
+                                <span className="w-2 h-2 bg-sage-400 rounded-full"></span>
+                              )}
+                              {notification.sensorType && (
+                                <span className="px-2 py-1 rounded text-xs font-medium bg-dark-bg border border-dark-border text-gray-400">
+                                  {notification.sensorType}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-400 mb-2">
+                              <span>
+                                <span className="font-semibold text-gray-300">Type:</span> {notification.type}
+                              </span>
+                              {notification.subtitle && (
+                                <span>
+                                  <span className="font-semibold text-gray-300">Subtitle:</span> {notification.subtitle}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-300">{notification.description}</p>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-400">
-                            <span>
-                              <span className="font-semibold text-gray-300">Machine:</span> {alert.machine_id}
-                            </span>
-                            <span>
-                              <span className="font-semibold text-gray-300">Alarm:</span> {formatAlarmName(alert.alarm_type)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right text-sm text-gray-400">
-                            <div>
-                              {new Date(alert.timestamp).toLocaleDateString()} {new Date(alert.timestamp).toLocaleTimeString()}
+                          <div className="flex items-center gap-3">
+                            <div className="text-right text-sm text-gray-400">
+                              <div>{notification.time || new Date(notification.createdAt).toLocaleString()}</div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Expanded Details - AI Analysis */}
-                    {isExpanded && (
-                      <div className="px-6 pb-6 pt-0 border-t border-dark-border">
-                        <div className="mt-4">
-                          <AlarmInstructions
-                            alarmType={alert.alarm_type}
-                            machineType={getMachineType(alert.machine_id)}
-                            state={alert.state}
-                            machineId={alert.machine_id}
-                            onClose={undefined}
-                          />
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="px-6 pb-6 pt-0 border-t border-dark-border">
+                          <div className="mt-4 space-y-2 text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">Read:</span>
+                              <span className={notification.read ? 'text-sage-400' : 'text-gray-400'}>
+                                {notification.read ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            {notification.reportId && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-400">Report ID:</span>
+                                <span className="text-gray-300">{notification.reportId}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400">Created:</span>
+                              <span className="text-gray-300">
+                                {new Date(notification.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Alarm Events List */
+          <div className="w-full">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                <span className="ml-3 text-gray-400">Loading events...</span>
+              </div>
+            ) : error ? (
+              <div className="p-8 bg-dark-panel border border-dark-border rounded text-center">
+                <p className="text-red-400">Error loading alarm events</p>
+              </div>
+            ) : filteredAlerts.length === 0 ? (
+              <div className="p-8 bg-dark-panel border border-dark-border rounded text-center">
+                <p className="text-gray-400">No events found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredAlerts.map((alert, idx) => {
+                  const alertKey = `${alert.timestamp}-${idx}`;
+                  const isExpanded = expandedAlerts.has(alertKey);
+                  return (
+                    <div
+                      key={alertKey}
+                      className="bg-dark-panel border border-dark-border rounded-lg hover:border-midnight-300 transition-colors"
+                    >
+                      {/* Header - Clickable */}
+                      <div
+                        className="p-6 cursor-pointer"
+                        onClick={() => toggleExpand(alert, alertKey)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              {isExpanded ? (
+                                <ChevronDownIcon className="w-4 h-4 text-gray-400" />
+                              ) : (
+                                <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+                              )}
+                              <h3 className="text-gray-300 font-semibold text-lg">
+                                {formatAlarmName(alert.alarm_type)}
+                              </h3>
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-medium border ${
+                                  alert.state === 'RAISED'
+                                    ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                                    : 'bg-sage-500/20 text-sage-400 border-sage-500/30'
+                                }`}
+                              >
+                                {alert.state}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-400">
+                              <span>
+                                <span className="font-semibold text-gray-300">Machine:</span> {alert.machine_id}
+                              </span>
+                              <span>
+                                <span className="font-semibold text-gray-300">Alarm:</span> {formatAlarmName(alert.alarm_type)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right text-sm text-gray-400">
+                              <div>
+                                {new Date(alert.timestamp).toLocaleDateString()} {new Date(alert.timestamp).toLocaleTimeString()}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
+                      {/* Expanded Details - AI Analysis */}
+                      {isExpanded && (
+                        <div className="px-6 pb-6 pt-0 border-t border-dark-border">
+                          <div className="mt-4">
+                            <AlarmInstructions
+                              alarmType={alert.alarm_type}
+                              machineType={getMachineType(alert.machine_id)}
+                              state={alert.state}
+                              machineId={alert.machine_id}
+                              onClose={undefined}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

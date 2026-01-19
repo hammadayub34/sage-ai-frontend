@@ -1,0 +1,25 @@
+# Dockerfile for InfluxDB Writer Service
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy service code
+COPY influxdb_writer/ ./influxdb_writer/
+COPY influxdb_writer/influxdb_writer_production.py .
+
+# Set environment variables (override in deployment)
+ENV MQTT_BROKER_HOST=localhost
+ENV MQTT_BROKER_PORT=8883
+ENV MQTT_TLS_ENABLED=true
+ENV INFLUXDB_URL=http://localhost:8086
+ENV INFLUXDB_TOKEN=my-super-secret-auth-token
+ENV INFLUXDB_ORG=myorg
+ENV INFLUXDB_BUCKET=plc_data_new
+
+# Run the service
+CMD ["python", "influxdb_writer_production.py"]
+

@@ -314,7 +314,106 @@ export default function Dashboard() {
 
   const queryClient = useQueryClient();
 
-  // Fetch downtime stats for analysis
+  // Fetch shift utilization data for the selected machine across all shifts
+  const { data: shiftUtilizationData, isLoading: isLoadingShiftUtilization } = useQuery({
+    queryKey: ['shift-utilization', selectedLabId, selectedMachineId, selectedTimeRange],
+    queryFn: async () => {
+      if (!selectedLabId || !selectedMachineId || !selectedMachine) return null;
+      
+      try {
+        // Get lab details to fetch all shifts
+        const labsResponse = await fetch('/api/labs');
+        if (!labsResponse.ok) return null;
+        
+        const labsData = await labsResponse.json();
+        if (!labsData.success || !labsData.labs) return null;
+        
+        const lab = labsData.labs.find((l: Lab) => {
+          const lId = l._id?.toString() || l._id;
+          const selectedId = selectedLabId?.toString() || selectedLabId;
+          return lId === selectedId;
+        });
+        
+        if (!lab || !lab.shifts || lab.shifts.length === 0) return null;
+        
+        // Calculate date range based on selectedTimeRange
+        const endDate = new Date();
+        const startDate = new Date();
+        
+        if (selectedTimeRange === '24h') {
+          startDate.setDate(startDate.getDate() - 1);
+        } else if (selectedTimeRange === '7d') {
+          startDate.setDate(startDate.getDate() - 7);
+        } else if (selectedTimeRange === '30d') {
+          startDate.setDate(startDate.getDate() - 30);
+        }
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        // Fetch shift utilization for each shift and aggregate
+        const shiftPromises = lab.shifts.map(async (shift: any) => {
+          try {
+            const response = await fetch(
+              `/api/shift-utilization?labId=${selectedLabId}&shiftName=${shift.name}&startDate=${startDateStr}&endDate=${endDateStr}`
+            );
+            if (!response.ok) return null;
+            
+            const result = await response.json();
+            if (!result.success || !result.data) return null;
+            
+            // Find data for the selected machine
+            const machineData = result.data.machineUtilizations?.find(
+              (m: any) => m.machineName === selectedMachine.machineName
+            );
+            
+            if (machineData) {
+              return {
+                totalScheduledHours: machineData.totalScheduledHours || 0,
+                totalProductiveHours: machineData.totalProductiveHours || 0,
+                totalIdleHours: machineData.totalIdleHours || 0,
+                totalNonProductiveHours: machineData.totalNonProductiveHours || 0,
+              };
+            }
+            return null;
+          } catch (error) {
+            console.error(`Error fetching shift ${shift.name}:`, error);
+            return null;
+          }
+        });
+        
+        const shiftResults = await Promise.all(shiftPromises);
+        
+        // Aggregate across all shifts
+        const aggregated = shiftResults.reduce(
+          (acc, shiftData) => {
+            if (shiftData) {
+              acc.totalScheduledHours += shiftData.totalScheduledHours;
+              acc.totalProductiveHours += shiftData.totalProductiveHours;
+              acc.totalIdleHours += shiftData.totalIdleHours;
+              acc.totalNonProductiveHours += shiftData.totalNonProductiveHours;
+            }
+            return acc;
+          },
+          {
+            totalScheduledHours: 0,
+            totalProductiveHours: 0,
+            totalIdleHours: 0,
+            totalNonProductiveHours: 0,
+          }
+        );
+        
+        // Only return if we have scheduled hours
+        return aggregated.totalScheduledHours > 0 ? aggregated : null;
+      } catch (error) {
+        console.error('Error fetching shift utilization:', error);
+        return null;
+      }
+    },
+    enabled: !!selectedLabId && !!selectedMachineId && !!selectedMachine,
+  });
+
+  // Fetch downtime stats for analysis (fallback when shift utilization is not available)
   const { data: downtimeData } = useQuery({
     queryKey: ['downtime', selectedMachineId, selectedTimeRange],
     queryFn: async () => {
@@ -324,7 +423,7 @@ export default function Dashboard() {
       const result = await response.json();
       return result.data;
     },
-    enabled: !!selectedMachineId,
+    enabled: !!selectedMachineId && !shiftUtilizationData, // Only fetch if shift utilization is not available
   });
 
   // Fetch alarm history for analysis
@@ -397,14 +496,56 @@ export default function Dashboard() {
 
   // Fetch monitoring analysis
   const fetchMonitoringAnalysis = async () => {
-    if (!selectedMachineId || !downtimeData) {
+    // Check if we have either MongoDB data or InfluxDB data
+    const hasMongoData = shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0;
+    const hasInfluxData = downtimeData && (downtimeData.downtimePercentage !== undefined || downtimeData.totalDowntime !== undefined);
+    
+    if (!selectedMachineId || !selectedLabId || (!hasMongoData && !hasInfluxData)) {
+      console.log('[Monitoring Analysis] Missing required data:', {
+        selectedMachineId,
+        hasMongoData,
+        hasInfluxData,
+        selectedLabId
+      });
       return;
     }
     
     const machine = selectedMachine || machines.find(m => m._id === selectedMachineId);
     if (!machine) {
+      console.log('[Monitoring Analysis] Machine not found:', selectedMachineId);
       return;
     }
+
+    // Get lab name - ensure we have the correct lab
+    const selectedLab = labs.find(lab => lab._id === selectedLabId);
+    if (!selectedLab) {
+      console.log('[Monitoring Analysis] Lab not found:', selectedLabId, 'Available labs:', labs.map(l => ({ id: l._id, name: l.name })));
+      return;
+    }
+
+    const labName = selectedLab.name;
+    const machineName = machine.machineName;
+    
+    // Validate that we have valid names
+    if (!machineName || machineName === 'Unknown Machine') {
+      console.error('[Monitoring Analysis] Invalid machine name:', machineName, 'Machine object:', machine);
+      return;
+    }
+    
+    if (!labName || labName === 'Unknown Lab') {
+      console.error('[Monitoring Analysis] Invalid lab name:', labName, 'Lab object:', selectedLab);
+      return;
+    }
+    
+    // Log for debugging
+    console.log('[Monitoring Analysis] Sending data:', {
+      machineName,
+      machineId: selectedMachineId,
+      labName,
+      selectedLabId,
+      machineObject: machine,
+      labObject: selectedLab
+    });
 
     setLoadingMonitoringAnalysis(true);
     setMonitoringAnalysis(null);
@@ -434,8 +575,6 @@ export default function Dashboard() {
         return range;
       };
 
-      const selectedLab = labs.find(lab => lab._id === selectedLabId);
-
       // Check if vibration data is available
       const hasVibrationData = !isCNCMachineA && chartTab === 'vibration' && vibrationInfo?.hasData;
       const vibrationDataPoints = vibrationInfo?.dataPoints || 0;
@@ -459,15 +598,76 @@ export default function Dashboard() {
         return rangeMap[range] || range;
       };
 
+      // Calculate performance values from MongoDB data if available, otherwise use InfluxDB data
+      let downtimePercentage: number;
+      let uptimePercentage: number;
+      let totalDowntime: number;
+      let totalUptime: number;
+      let incidentCount: number;
+      let scheduledHours: number | undefined;
+
+      if (shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0) {
+        // Use MongoDB data - EXACT SAME CALCULATION AS PERFORMANCE SECTION
+        const scheduledHoursValue = shiftUtilizationData.totalScheduledHours;
+        const downtimeHours = shiftUtilizationData.totalNonProductiveHours;
+        const productiveHours = shiftUtilizationData.totalProductiveHours;
+        const idleHours = shiftUtilizationData.totalIdleHours;
+        
+        // Calculate percentages (same as DowntimeStats component)
+        const calculatedDowntimePercentage = (downtimeHours / scheduledHoursValue) * 100;
+        const calculatedUptimePercentage = ((idleHours + productiveHours) / scheduledHoursValue) * 100;
+        
+        // Ensure total is exactly 100% (same normalization logic as Performance section)
+        const totalPercentage = calculatedDowntimePercentage + calculatedUptimePercentage;
+        downtimePercentage = calculatedDowntimePercentage;
+        uptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+          ? 100 - calculatedDowntimePercentage
+          : calculatedUptimePercentage;
+        
+        // Convert hours to seconds for API consistency
+        totalDowntime = downtimeHours * 3600;
+        totalUptime = (idleHours + productiveHours) * 3600;
+        
+        // Incident count not available from shift utilization, use 0
+        incidentCount = 0;
+        scheduledHours = scheduledHoursValue;
+        
+        console.log('[Monitoring Analysis] Using MongoDB data (matching Performance section):', {
+          scheduledHours: scheduledHoursValue,
+          downtimeHours,
+          productiveHours,
+          idleHours,
+          downtimePercentage: downtimePercentage.toFixed(2),
+          uptimePercentage: uptimePercentage.toFixed(2),
+          calculatedDowntimePercentage: calculatedDowntimePercentage.toFixed(2),
+          calculatedUptimePercentage: calculatedUptimePercentage.toFixed(2),
+          totalPercentage: totalPercentage.toFixed(2),
+        });
+      } else {
+        // Fallback to InfluxDB data
+        downtimePercentage = downtimeData?.downtimePercentage || 0;
+        uptimePercentage = downtimeData?.uptimePercentage || 0;
+        totalDowntime = downtimeData?.totalDowntime || 0;
+        totalUptime = downtimeData?.totalUptime || 0;
+        incidentCount = downtimeData?.incidentCount || 0;
+        scheduledHours = undefined;
+        
+        console.log('[Monitoring Analysis] Using InfluxDB fallback data:', {
+          downtimePercentage: downtimePercentage.toFixed(2),
+          uptimePercentage: uptimePercentage.toFixed(2),
+          incidentCount,
+        });
+      }
+
       const requestBody = {
-        machineName: machine.machineName,
+        machineName: machineName,
         machineId: selectedMachineId,
-        labName: selectedLab?.name || 'Unknown Lab',
-        downtimePercentage: downtimeData.downtimePercentage || 0,
-        uptimePercentage: downtimeData.uptimePercentage || 0,
-        totalDowntime: downtimeData.totalDowntime || 0,
-        totalUptime: downtimeData.totalUptime || 0,
-        incidentCount: downtimeData.incidentCount || 0,
+        labName: labName,
+        downtimePercentage,
+        uptimePercentage,
+        totalDowntime,
+        totalUptime,
+        incidentCount,
         timeRange: formatTimeRange(`-${selectedTimeRange}`),
         alertsCount,
         alarmBreakdown,
@@ -479,6 +679,7 @@ export default function Dashboard() {
         vibrationAxesAvailable,
         vibrationTimeRange: vibrationTimeRange ? formatVibrationTimeRange(vibrationTimeRange) : null,
         chartType: isCNCMachineA ? chartTab : (chartTab === 'vibration' ? 'vibration' : 'current'),
+        scheduledHours,
       };
 
       const response = await fetch('/api/monitoring/analysis', {
@@ -537,11 +738,14 @@ export default function Dashboard() {
 
   // Auto-fetch analysis when machine and data are available
   useEffect(() => {
-    if (selectedMachineId && selectedLabId && downtimeData && !loadingMonitoringAnalysis) {
+    const hasMongoData = shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0;
+    const hasInfluxData = downtimeData && (downtimeData.downtimePercentage !== undefined || downtimeData.totalDowntime !== undefined);
+    
+    if (selectedMachineId && selectedLabId && (hasMongoData || hasInfluxData) && !loadingMonitoringAnalysis) {
       fetchMonitoringAnalysis();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMachineId, selectedLabId, selectedTimeRange, downtimeData, alarmHistoryData, workOrders, vibrationDataOverall, chartTab]);
+  }, [selectedMachineId, selectedLabId, selectedTimeRange, shiftUtilizationData, downtimeData, alarmHistoryData, workOrders, vibrationDataOverall, chartTab]);
   
   const handleRefresh = () => {
     // Invalidate all queries to force refresh
@@ -783,7 +987,13 @@ export default function Dashboard() {
       {/* Downtime Statistics */}
       {selectedMachineId && (
         <div className="mb-6">
-          <DowntimeStats machineId={selectedMachineId} timeRange={`-${selectedTimeRange}`} />
+          <DowntimeStats 
+            machineId={selectedMachineId} 
+            timeRange={`-${selectedTimeRange}`}
+            shiftUtilizationData={isLoadingShiftUtilization ? undefined : (shiftUtilizationData || null)}
+            machineName={selectedMachine?.machineName}
+            labId={selectedLabId}
+          />
         </div>
       )}
 
