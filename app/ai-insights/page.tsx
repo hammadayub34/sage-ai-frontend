@@ -869,11 +869,37 @@ export default function AIInsightsPage() {
         }
       }
 
-      // Calculate percentages
-      const downtimePercentage = totalTimePeriod > 0 ? (totalDowntime / totalTimePeriod) * 100 : 0;
-      const uptimePercentage = machineIds.length > 0 
-        ? (totalTimePeriod > 0 ? (totalUptime / totalTimePeriod) * 100 : 100)
-        : 0; // 0% if no machines (not applicable)
+      // Calculate percentages - EXACT SAME LOGIC AS PERFORMANCE SECTION
+      let downtimePercentage: number;
+      let uptimePercentage: number;
+      
+      if (totalTimePeriod > 0) {
+        // Calculate percentages (same as Performance section)
+        const calculatedDowntimePercentage = (totalDowntime / totalTimePeriod) * 100;
+        const calculatedUptimePercentage = (totalUptime / totalTimePeriod) * 100;
+        
+        // Ensure total is exactly 100% (same normalization logic as Performance section)
+        const totalPercentage = calculatedDowntimePercentage + calculatedUptimePercentage;
+        downtimePercentage = calculatedDowntimePercentage;
+        uptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+          ? 100 - calculatedDowntimePercentage
+          : calculatedUptimePercentage;
+        
+        console.log('[AI Insights] Performance calculation (matching Performance section):', {
+          totalDowntime: (totalDowntime / 3600).toFixed(2) + 'h',
+          totalUptime: (totalUptime / 3600).toFixed(2) + 'h',
+          totalTimePeriod: (totalTimePeriod / 3600).toFixed(2) + 'h',
+          calculatedDowntimePercentage: calculatedDowntimePercentage.toFixed(2) + '%',
+          calculatedUptimePercentage: calculatedUptimePercentage.toFixed(2) + '%',
+          totalPercentage: totalPercentage.toFixed(2) + '%',
+          normalizedDowntimePercentage: downtimePercentage.toFixed(2) + '%',
+          normalizedUptimePercentage: uptimePercentage.toFixed(2) + '%',
+        });
+      } else {
+        // No time period data
+        downtimePercentage = 0;
+        uptimePercentage = machineIds.length > 0 ? 100 : 0; // 100% if machines exist but no data, 0% if no machines
+      }
 
       // Aggregate alerts
       const totalAlerts = alertsResults.reduce((sum, count) => sum + count, 0);
