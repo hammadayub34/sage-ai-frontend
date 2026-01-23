@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { cloneElement } from 'react';
-import { DashboardIcon, ChatIcon, CalendarIcon, NotificationIcon, WorkflowIcon, ShopfloorsIcon, SignOutIcon, SignalIcon, ChartIcon } from './Icons';
+import { DashboardIcon, ChatIcon, CalendarIcon, NotificationIcon, WorkflowIcon, ShopfloorsIcon, SignOutIcon, SignalIcon, ChartIcon, ClockIcon } from './Icons';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -44,6 +44,11 @@ export function Sidebar() {
       name: 'Equipments',
       href: '/shopfloors',
       icon: <ShopfloorsIcon className="w-6 h-6" />,
+    },
+    {
+      name: 'Insights',
+      href: '/scheduled-hours',
+      icon: <ClockIcon className="w-6 h-6" />,
     },
     {
       name: 'Notifications',

@@ -457,27 +457,27 @@ export default function ShopfloorsPage() {
                         };
                         
                         return (
-                          <div
-                            key={idx}
+                        <div
+                          key={idx}
                             className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-dark-bg border border-dark-border rounded text-xs hover:border-sage-500/50 transition-all cursor-default"
-                          >
+                        >
                             <span className="font-mono text-white text-xs">{node.mac}</span>
-                            {node.nodeType && (
+                              {node.nodeType && (
                               <span className="text-xs text-sage-400 font-medium bg-sage-500/10 px-1 py-0.5 rounded">
                                 {node.nodeType}
                               </span>
-                            )}
-                            {node.sensorType && (
+                              )}
+                              {node.sensorType && (
                               <span className={`text-xs font-semibold px-1 py-0.5 rounded ${getSensorTypeColor(node.sensorType)}`}>
                                 {node.sensorType.split(' ')[0]}
                               </span>
-                            )}
-                          </div>
+                              )}
+                            </div>
                         );
                       })}
                       {machine.nodes.length > 3 && (
                         <span className="text-xs text-gray-500">+{machine.nodes.length - 3}</span>
-                      )}
+                          )}
                     </div>
                   ) : (
                     <span className="text-gray-500 text-xs">No nodes</span>

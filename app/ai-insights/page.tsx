@@ -1114,16 +1114,75 @@ export default function AIInsightsPage() {
     setWiseAnalysis(null); // Clear previous analysis completely
     
     try {
+      // Calculate performance values - EXACT SAME LOGIC AS PERFORMANCE SECTION
+      let downtimePercentage: number;
+      let uptimePercentage: number;
+      let totalDowntime: number;
+      let totalUptime: number;
+      
+      // If shift is selected and we have shift utilization data, use those values (matching Performance section)
+      if (selectedShift && shiftUtilization && shiftUtilization.totalScheduledHours > 0) {
+        const scheduledHours = shiftUtilization.totalScheduledHours || 0;
+        const downtimeHours = shiftUtilization.totalNonProductiveHours || 0;
+        const productiveHours = shiftUtilization.totalProductiveHours || 0;
+        const idleHours = shiftUtilization.totalIdleHours || 0;
+        
+        // Calculate percentages (EXACT SAME as Performance section display)
+        const calculatedDowntimePercentage = scheduledHours > 0 
+          ? (downtimeHours / scheduledHours) * 100 
+          : 0;
+        const calculatedUptimePercentage = scheduledHours > 0 
+          ? ((idleHours + productiveHours) / scheduledHours) * 100 
+          : 0;
+        
+        // Ensure total is exactly 100% (same normalization logic as Performance section)
+        const totalPercentage = calculatedDowntimePercentage + calculatedUptimePercentage;
+        downtimePercentage = calculatedDowntimePercentage;
+        uptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
+          ? 100 - calculatedDowntimePercentage  // Ensure they add up to exactly 100%
+          : calculatedUptimePercentage;
+        
+        // Convert hours to seconds for API consistency
+        totalDowntime = downtimeHours * 3600;
+        totalUptime = (idleHours + productiveHours) * 3600;
+        
+        console.log('[AI Insights Analysis] Using shift utilization data (matching Performance section):', {
+          shiftName: selectedShift,
+          scheduledHours,
+          downtimeHours,
+          productiveHours,
+          idleHours,
+          calculatedDowntimePercentage: calculatedDowntimePercentage.toFixed(2) + '%',
+          calculatedUptimePercentage: calculatedUptimePercentage.toFixed(2) + '%',
+          totalPercentage: totalPercentage.toFixed(2) + '%',
+          normalizedDowntimePercentage: downtimePercentage.toFixed(2) + '%',
+          normalizedUptimePercentage: uptimePercentage.toFixed(2) + '%',
+        });
+      } else {
+        // Use maintenanceStats values (for no shift selected or no shift utilization data)
+        downtimePercentage = maintenanceStats.downtimePercentage;
+        uptimePercentage = maintenanceStats.uptimePercentage;
+        totalDowntime = maintenanceStats.totalDowntime;
+        totalUptime = maintenanceStats.totalUptime;
+        
+        console.log('[AI Insights Analysis] Using maintenanceStats data:', {
+          downtimePercentage: downtimePercentage.toFixed(2) + '%',
+          uptimePercentage: uptimePercentage.toFixed(2) + '%',
+          totalDowntime: (totalDowntime / 3600).toFixed(2) + 'h',
+          totalUptime: (totalUptime / 3600).toFixed(2) + 'h',
+        });
+      }
+      
       // Prepare request body with shift information and utilization data
       const requestBody: any = {
           labName: currentSelectedLab.name,
           totalMachines: maintenanceStats.totalMachines,
           scheduledMaintenanceCount: maintenanceStats.scheduledMaintenanceCount,
           machinesWithMaintenance: maintenanceStats.machinesWithMaintenance.length,
-          totalDowntime: maintenanceStats.totalDowntime,
-          totalUptime: maintenanceStats.totalUptime,
-          downtimePercentage: maintenanceStats.downtimePercentage,
-          uptimePercentage: maintenanceStats.uptimePercentage,
+          totalDowntime: totalDowntime,
+          totalUptime: totalUptime,
+          downtimePercentage: downtimePercentage,
+          uptimePercentage: uptimePercentage,
           timePeriod: getDateRangeLabel(dateRange),
         alertsCount: alertsCount,
         downtimeIncidentsCount: downtimeIncidentsCount,
@@ -1141,6 +1200,14 @@ export default function AIInsightsPage() {
           machinesWithData: shiftUtilization.machinesWithData,
         };
       }
+      
+      console.log('[AI Insights Analysis] Final request body values:', {
+        downtimePercentage: requestBody.downtimePercentage.toFixed(2) + '%',
+        uptimePercentage: requestBody.uptimePercentage.toFixed(2) + '%',
+        totalDowntime: (requestBody.totalDowntime / 3600).toFixed(2) + 'h',
+        totalUptime: (requestBody.totalUptime / 3600).toFixed(2) + 'h',
+        shiftSelected: !!selectedShift,
+      });
 
       const response = await fetch('/api/ai-insights/wise-analysis', {
         method: 'POST',
