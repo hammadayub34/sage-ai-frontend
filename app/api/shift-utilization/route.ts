@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const labId = searchParams.get('labId');
     const shiftName = searchParams.get('shiftName');
+    const machineName = searchParams.get('machineName'); // Optional: filter by specific machine
     const days = parseInt(searchParams.get('days') || '30'); // Default to last month (30 days)
 
     if (!labId) {
@@ -75,8 +76,35 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Get machine names
-    const machineNames = machines.map(m => m.machineName);
+    // Get machine names - filter by specific machine if provided, otherwise use all machines
+    let machineNames: string[];
+    if (machineName) {
+      // Filter to only the selected machine
+      const selectedMachine = machines.find(m => m.machineName === machineName);
+      if (selectedMachine) {
+        machineNames = [selectedMachine.machineName];
+      } else {
+        // Machine not found, return empty result
+        return NextResponse.json({
+          success: true,
+          data: {
+            shiftName,
+            totalMachines: machines.length,
+            machinesWithData: 0,
+            averageUtilization: 0,
+            totalProductiveHours: 0,
+            totalIdleHours: 0,
+            totalScheduledHours: 0,
+            totalNonProductiveHours: 0,
+            totalNodeOffHours: 0,
+            machineUtilizations: [],
+          }
+        });
+      }
+    } else {
+      // Use all machines in the lab
+      machineNames = machines.map(m => m.machineName);
+    }
 
     // Calculate date range - support custom startDate and endDate, or use days
     const formatDate = (date: Date) => {

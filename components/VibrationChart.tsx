@@ -154,7 +154,7 @@ export function VibrationChart({
   
   const isLoading = axisData.some(d => d.isLoading);
   const error = axisData.find(d => d.error)?.error;
-  
+
   // Get the latest timestamp from all axes
   useEffect(() => {
     if (!isLoading && !error && axisData.length > 0) {
@@ -228,8 +228,8 @@ export function VibrationChart({
       .map(timestamp => {
         const date = new Date(timestamp);
         // For 5-minute view, show time with seconds
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
+          const hours = date.getHours().toString().padStart(2, '0');
+          const minutes = date.getMinutes().toString().padStart(2, '0');
         const seconds = date.getSeconds().toString().padStart(2, '0');
         const timeLabel = `${hours}:${minutes}:${seconds}`;
         
@@ -287,7 +287,7 @@ export function VibrationChart({
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="heading-inter heading-inter-sm">Vibration Time Series</h3>
+        <h3 className="heading-inter heading-inter-sm">Vibration Time Series</h3>
           <div className="text-xs text-gray-500 mt-1">
             {getDataTypeText()} (Last {getTimeRangeText()} of available data)
             {lastSeenTime && (
@@ -295,19 +295,19 @@ export function VibrationChart({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-400">Time Range:</label>
-          <select
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-400">Time Range:</label>
+            <select
             value={selectedTimeRange || '5m'}
-            onChange={(e) => handleTimeRangeChange(e.target.value as TimeRangeOption)}
-            className="bg-dark-panel border border-dark-border rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
-          >
-            {timeRangeOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+              onChange={(e) => handleTimeRangeChange(e.target.value as TimeRangeOption)}
+              className="bg-dark-panel border border-dark-border rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-sage-500"
+            >
+              {timeRangeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
         </div>
       </div>
 
@@ -357,72 +357,72 @@ export function VibrationChart({
             />
           )}
           
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#404040" />
-              <XAxis 
-                dataKey="time" 
-                stroke="#e0e0e0"
-                style={{ fontSize: '11px' }}
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#404040" />
+            <XAxis 
+              dataKey="time" 
+              stroke="#e0e0e0"
+              style={{ fontSize: '11px' }}
                 angle={-45}
                 textAnchor="end"
                 height={80}
                 interval="preserveStartEnd"
-                tick={{ fill: '#9ca3af' }}
+              tick={{ fill: '#9ca3af' }}
+            />
+            <YAxis 
+              stroke="#e0e0e0"
+              style={{ fontSize: '12px' }}
+              label={{ value: 'Vibration (mm/s) / Acceleration (g)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#e0e0e0' } }}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                backgroundColor: '#1f2937', 
+                border: '1px solid #437874',
+                color: '#e0e0e0',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
+              }}
+              formatter={(value: number, name: string) => {
+                const axis = name as VibrationAxis;
+                const unit = axis.includes('acc') ? 'g' : 'mm/s';
+                return [`${value !== null ? value.toFixed(2) : 'N/A'} ${unit}`, AXIS_LABELS[axis] || name];
+              }}
+              labelFormatter={(label, payload) => {
+                if (payload && payload[0] && payload[0].payload.fullTime) {
+                  const date = new Date(payload[0].payload.fullTime);
+                  return date.toLocaleString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric',
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                  });
+                }
+                return `Time: ${label}`;
+              }}
+            />
+            <Legend 
+              wrapperStyle={{ paddingTop: '20px' }}
+              iconType="line"
+            />
+            {selectedAxes.map(axis => (
+              <Line 
+                key={axis}
+                type="monotone" 
+                dataKey={axis}
+                name={AXIS_LABELS[axis]}
+                stroke={AXIS_COLORS[axis]}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: AXIS_COLORS[axis] }}
+                connectNulls={false}
               />
-              <YAxis 
-                stroke="#e0e0e0"
-                style={{ fontSize: '12px' }}
-                label={{ value: 'Vibration (mm/s) / Acceleration (g)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#e0e0e0' } }}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#1f2937', 
-                  border: '1px solid #437874',
-                  color: '#e0e0e0',
-                  borderRadius: '6px',
-                  padding: '8px 12px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
-                }}
-                formatter={(value: number, name: string) => {
-                  const axis = name as VibrationAxis;
-                  const unit = axis.includes('acc') ? 'g' : 'mm/s';
-                  return [`${value !== null ? value.toFixed(2) : 'N/A'} ${unit}`, AXIS_LABELS[axis] || name];
-                }}
-                labelFormatter={(label, payload) => {
-                  if (payload && payload[0] && payload[0].payload.fullTime) {
-                    const date = new Date(payload[0].payload.fullTime);
-                    return date.toLocaleString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric',
-                      hour: '2-digit', 
-                      minute: '2-digit',
-                      second: '2-digit'
-                    });
-                  }
-                  return `Time: ${label}`;
-                }}
-              />
-              <Legend 
-                wrapperStyle={{ paddingTop: '20px' }}
-                iconType="line"
-              />
-              {selectedAxes.map(axis => (
-                <Line 
-                  key={axis}
-                  type="monotone" 
-                  dataKey={axis}
-                  name={AXIS_LABELS[axis]}
-                  stroke={AXIS_COLORS[axis]}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: AXIS_COLORS[axis] }}
-                  connectNulls={false}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
         </div>
       ) : selectedAxes.length === 0 ? (
         <div className="text-gray-400 text-center py-8">Please select at least one axis to display</div>
