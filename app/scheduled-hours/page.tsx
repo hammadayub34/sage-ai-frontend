@@ -24,6 +24,7 @@ interface Machine {
   machineName: string;
   labId: string;
   status: 'active' | 'inactive';
+  description?: string;
 }
 
 interface ScheduledHoursResponse {
