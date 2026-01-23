@@ -87,8 +87,8 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType, shif
         <div className="flex items-center justify-between mb-4">
           <h2 className="heading-inter heading-inter-sm text-white flex items-center gap-2">
             <ClockIcon className="w-5 h-5 text-sage-400" />
-            Performance
-          </h2>
+          Performance
+        </h2>
           <div className="h-3 bg-dark-border rounded w-24 animate-pulse"></div>
         </div>
         {/* Loading skeleton */}
@@ -151,13 +151,13 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType, shif
     };
   } else {
     stats = data || {
-      downtimePercentage: 0,
-      uptimePercentage: 100,
-      totalDowntime: 0,
-      totalUptime: 0,
-      incidentCount: 0,
-      periods: [],
-    };
+    downtimePercentage: 0,
+    uptimePercentage: 100,
+    totalDowntime: 0,
+    totalUptime: 0,
+    incidentCount: 0,
+    periods: [],
+  };
   }
 
   // Format time range for display
@@ -239,8 +239,8 @@ export function DowntimeStats({ machineId, timeRange = '-24h', machineType, shif
               `${((shiftUtilizationData.totalIdleHours + shiftUtilizationData.totalProductiveHours)).toFixed(1)}h (Idle + Productive) / ${(shiftUtilizationData.totalScheduledHours).toFixed(1)}h`
             ) : (
               <>
-                <TrendingUpIcon className="w-3 h-3 inline mr-1" />
-                Availability
+            <TrendingUpIcon className="w-3 h-3 inline mr-1" />
+            Availability
               </>
             )}
           </div>
