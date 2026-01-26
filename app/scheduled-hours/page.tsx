@@ -29,7 +29,17 @@ interface Machine {
 
 interface ScheduledHoursResponse {
   success: boolean;
-  scheduledHours?: number;
+  data?: {
+    scheduledHours?: number;
+    shiftInfo?: {
+      shiftName: string;
+      startTime: string;
+      endTime: string;
+      shiftDuration: number;
+      numberOfDays: number;
+    };
+  };
+  scheduledHours?: number; // Keep for backward compatibility
   shiftInfo?: {
     shiftName: string;
     startTime: string;
