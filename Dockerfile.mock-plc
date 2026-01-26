@@ -1,0 +1,23 @@
+# Dockerfile for Mock PLC Agent Service
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy service code
+COPY mock_plc_agent/ ./mock_plc_agent/
+COPY mock_plc_agent/mock_plc_agent.py .
+
+# Set environment variables (override in deployment)
+ENV MQTT_BROKER_HOST=localhost
+ENV MQTT_BROKER_PORT=8883
+ENV MQTT_TLS_ENABLED=true
+ENV MACHINE_ID=machine-01
+ENV PUBLISH_INTERVAL=2.0
+
+# Run the service
+CMD ["python", "mock_plc_agent.py"]
+

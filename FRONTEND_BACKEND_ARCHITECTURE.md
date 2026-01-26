@@ -1,0 +1,499 @@
+# Frontend-Backend Architecture & Vercel Deployment Guide
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Architecture Explanation](#architecture-explanation)
+3. [How Frontend Calls Backend](#how-frontend-calls-backend)
+4. [Vercel Deployment](#vercel-deployment)
+5. [Environment Variables Configuration](#environment-variables-configuration)
+6. [External Services Connectivity](#external-services-connectivity)
+7. [Deployment Checklist](#deployment-checklist)
+8. [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+This document explains how the frontend and backend communicate in this Next.js application, and what happens when you deploy to Vercel.
+
+**Key Point**: There is no separate "backend" folder. The backend is implemented as **Next.js API Routes** inside the `frontend/` directory.
+
+---
+
+## Architecture Explanation
+
+### Project Structure
+
+```
+mqtt-ot-network/
+├── frontend/                          # Next.js Application
+│   ├── app/
+│   │   ├── page.tsx                   # Frontend UI (Client-side)
+│   │   ├── chat/
+│   │   ├── work-orders/
+│   │   └── api/                        # ⭐ BACKEND API ROUTES (Server-side)
+│   │       ├── influxdb/
+│   │       │   ├── query/route.ts     # Backend endpoint
+│   │       │   ├── latest/route.ts     # Backend endpoint
+│   │       │   └── vibration/route.ts # Backend endpoint
+│   │       ├── chat/route.ts           # Backend endpoint
+│   │       ├── services/
+│   │       │   ├── start/route.ts     # Backend endpoint
+│   │       │   └── stop/route.ts      # Backend endpoint
+│   │       └── workflows/
+│   │           └── execute/route.ts   # Backend endpoint
+│   └── lib/
+│       └── influxdb.ts                # Frontend client (calls /api/*)
+│
+├── mock_plc_agent/                     # Python service (runs separately)
+├── influxdb_writer/                    # Python service (runs separately)
+├── alarm_monitor/                      # Python service (runs separately)
+└── docker-compose.yml                  # Docker services (MQTT, InfluxDB, Grafana)
+```
+
+### Why This Architecture?
+
+**Next.js API Routes** provide:
+- ✅ **Security**: API keys and credentials stay on the server (never exposed to browser)
+- ✅ **No CORS Issues**: Same-origin requests (frontend and API on same domain)
+- ✅ **Simplicity**: One codebase, one deployment
+- ✅ **Type Safety**: Shared TypeScript types between frontend and backend
+- ✅ **Serverless Ready**: Automatically converts to serverless functions on Vercel
+
+---
+
+## How Frontend Calls Backend
+
+### Step 1: Frontend Client Code (Browser)
+
+The frontend makes HTTP requests to API routes:
+
+```typescript
+// frontend/lib/influxdb.ts
+async function executeQuery(fluxQuery: string): Promise<any[]> {
+  const response = await fetch('/api/influxdb/query', {  // ← Calls Next.js API route
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fluxQuery }),
+  });
+  
+  const result = await response.json();
+  return result.data || [];
+}
+```
+
+### Step 2: Next.js API Route (Server)
+
+The API route runs on the **server** (not in the browser):
+
+```typescript
+// frontend/app/api/influxdb/query/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { InfluxDB, QueryApi } from '@influxdata/influxdb-client';
+
+// These environment variables are ONLY available on the server
+const INFLUXDB_URL = process.env.INFLUXDB_URL || 'http://localhost:8086';
+const INFLUXDB_TOKEN = process.env.INFLUXDB_TOKEN || 'my-super-secret-auth-token';
+
+export async function POST(request: NextRequest) {
+  // This code runs on the SERVER, not in the browser
+  // Can safely access InfluxDB, environment variables, etc.
+  
+  const influxDB = new InfluxDB({
+    url: INFLUXDB_URL,
+    token: INFLUXDB_TOKEN,
+  });
+  
+  // Query InfluxDB...
+  const results = await queryInfluxDB();
+  
+  return NextResponse.json({ data: results });
+}
+```
+
+### Flow Diagram
+
+```
+┌─────────────────┐
+│   Browser       │
+│  (Frontend UI)  │
+└────────┬────────┘
+         │ HTTP Request: POST /api/influxdb/query
+         │
+         ▼
+┌─────────────────┐
+│  Next.js API    │
+│  Route (Server) │
+└────────┬────────┘
+         │ Connects to external services
+         │
+         ▼
+┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
+│   InfluxDB      │     │  MQTT Broker │     │   Pinecone  │
+│  (Port 8086)    │     │  (Port 1883) │     │  (Cloud)    │
+└─────────────────┘     └──────────────┘     └─────────────┘
+```
+
+---
+
+## Vercel Deployment
+
+### What Happens When You Deploy to Vercel?
+
+When you deploy your Next.js frontend to Vercel:
+
+1. **Frontend Pages** → Served as static/SSR pages by Vercel
+2. **API Routes** (`/app/api/*`) → Converted to **Vercel Serverless Functions**
+
+### Vercel Deployment Architecture
+
+```
+Vercel Platform:
+├── Frontend (Static/SSR)
+│   ├── / (Dashboard)
+│   ├── /chat
+│   ├── /work-orders
+│   └── /workflows
+│
+└── API Routes (Serverless Functions)
+    ├── /api/influxdb/query      → Vercel Function
+    ├── /api/influxdb/latest     → Vercel Function
+    ├── /api/chat                → Vercel Function
+    ├── /api/services/start      → Vercel Function
+    ├── /api/services/stop        → Vercel Function
+    └── /api/workflows/execute   → Vercel Function
+```
+
+### Important: Serverless Function Limitations
+
+- ⚠️ **Cold Starts**: First request may be slower (function needs to start)
+- ⚠️ **Timeout**: Functions have execution time limits (10s on Hobby, 60s on Pro)
+- ⚠️ **No Persistent State**: Each function invocation is independent
+- ⚠️ **Network Access**: Functions can make outbound HTTP requests
+
+---
+
+## Environment Variables Configuration
+
+### Environment Variable Types
+
+In Next.js, there are two types of environment variables:
+
+#### 1. Server-Only Variables (API Routes)
+
+Variables **without** `NEXT_PUBLIC_` prefix are only available on the server:
+
+```bash
+# .env.local (frontend directory)
+INFLUXDB_URL=http://localhost:8086
+INFLUXDB_TOKEN=my-super-secret-auth-token
+INFLUXDB_ORG=myorg
+INFLUXDB_BUCKET=plc_data_new
+OPENAI_API_KEY=your-openai-key
+PINECONE_API_KEY=your-pinecone-key
+```
+
+**Usage in API Routes:**
+```typescript
+// frontend/app/api/influxdb/query/route.ts
+const INFLUXDB_URL = process.env.INFLUXDB_URL;  // ✅ Available
+```
+
+#### 2. Public Variables (Browser)
+
+Variables **with** `NEXT_PUBLIC_` prefix are exposed to the browser:
+
+```bash
+# .env.local (frontend directory)
+NEXT_PUBLIC_INFLUXDB_URL=http://localhost:8086
+NEXT_PUBLIC_INFLUXDB_BUCKET=plc_data_new
+```
+
+**Usage in Frontend Components:**
+```typescript
+// frontend/lib/influxdb.ts
+const BUCKET = process.env.NEXT_PUBLIC_INFLUXDB_BUCKET;  // ✅ Available in browser
+```
+
+### Vercel Environment Variables Setup
+
+1. Go to your Vercel project dashboard
+2. Navigate to **Settings** → **Environment Variables**
+3. Add the following variables:
+
+```bash
+# InfluxDB Configuration
+INFLUXDB_URL=https://your-influxdb-instance.com:8086
+INFLUXDB_TOKEN=your-secure-token
+INFLUXDB_ORG=myorg
+INFLUXDB_BUCKET=plc_data_new
+
+# MQTT Configuration (if needed)
+MQTT_BROKER_HOST=your-mqtt-broker.com
+MQTT_BROKER_PORT=8883
+
+# AI Services
+OPENAI_API_KEY=your-openai-api-key
+PINECONE_API_KEY=your-pinecone-api-key
+PINECONE_INDEX_NAME=alarm-manual
+
+# Optional: Public variables (if frontend needs them)
+NEXT_PUBLIC_INFLUXDB_BUCKET=plc_data_new
+```
+
+**Important**: After adding environment variables, **redeploy** your application for changes to take effect.
+
+---
+
+## External Services Connectivity
+
+### The Problem: Localhost URLs Don't Work on Vercel
+
+When your API routes run on Vercel, they execute on **Vercel's servers**, not your local machine. This means:
+
+- ❌ `http://localhost:8086` → Points to Vercel's server (not your InfluxDB)
+- ❌ `http://localhost:1883` → Points to Vercel's server (not your MQTT broker)
+- ✅ `https://api.example.com` → Works (public URL)
+- ✅ Cloud services (Pinecone, OpenAI) → Work (already public)
+
+### Solution Options
+
+#### Option 1: Use Cloud Services (Recommended)
+
+**InfluxDB Cloud:**
+- Sign up at https://www.influxdata.com/
+- Free tier available
+- Get your cloud URL: `https://us-east-1-1.aws.cloud2.influxdata.com`
+- Set `INFLUXDB_URL` in Vercel to your cloud URL
+
+**MQTT Cloud:**
+- Use HiveMQ Cloud (free tier): https://www.hivemq.com/cloud/
+- Or AWS IoT Core
+- Or Mosquitto on a public server
+- Set `MQTT_BROKER_HOST` in Vercel to your cloud broker URL
+
+#### Option 2: Deploy Services to AWS EC2/ECS
+
+As you mentioned, you have AWS EC2/ECS available:
+
+1. **Deploy InfluxDB to EC2/ECS:**
+   - Run InfluxDB in a Docker container
+   - Expose port 8086 publicly (with security groups)
+   - Set `INFLUXDB_URL` in Vercel to your EC2 public IP/domain
+
+2. **Deploy MQTT Broker to EC2/ECS:**
+   - Run Mosquitto in a Docker container
+   - Expose port 8883 (TLS) publicly
+   - Set `MQTT_BROKER_HOST` in Vercel to your EC2 public IP/domain
+
+#### Option 3: Use Tunnels (Development Only)
+
+For development/testing:
+- Use **ngrok** or **Cloudflare Tunnel** to expose localhost
+- Not recommended for production
+
+### Network Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Internet                              │
+└───────────────┬─────────────────────────────────────────┘
+                │
+                │ HTTPS Requests
+                │
+        ┌───────▼────────┐
+        │  Vercel        │
+        │  (Frontend +   │
+        │   API Routes)  │
+        └───────┬────────┘
+                │
+                │ HTTP/HTTPS Requests
+                │
+    ┌───────────┼───────────┐
+    │           │           │
+    ▼           ▼           ▼
+┌─────────┐ ┌─────────┐ ┌─────────┐
+│InfluxDB │ │  MQTT   │ │Pinecone│
+│ Cloud   │ │  Cloud  │ │  Cloud │
+│         │ │         │ │        │
+└─────────┘ └─────────┘ └─────────┘
+```
+
+---
+
+## Deployment Checklist
+
+### Pre-Deployment
+
+- [ ] **InfluxDB**: Deployed to cloud or accessible public URL
+- [ ] **MQTT Broker**: Deployed to cloud or accessible public URL
+- [ ] **Environment Variables**: All required variables identified
+- [ ] **API Keys**: OpenAI, Pinecone keys ready
+- [ ] **Security**: InfluxDB/MQTT secured with authentication
+
+### Vercel Deployment Steps
+
+1. [ ] **Connect Repository** to Vercel
+2. [ ] **Set Root Directory** to `frontend/` (if deploying from monorepo)
+3. [ ] **Add Environment Variables** in Vercel dashboard:
+   - [ ] `INFLUXDB_URL` (public URL, not localhost)
+   - [ ] `INFLUXDB_TOKEN`
+   - [ ] `INFLUXDB_ORG`
+   - [ ] `INFLUXDB_BUCKET`
+   - [ ] `OPENAI_API_KEY`
+   - [ ] `PINECONE_API_KEY`
+   - [ ] `PINECONE_INDEX_NAME`
+   - [ ] `MQTT_BROKER_HOST` (if needed)
+   - [ ] `MQTT_BROKER_PORT` (if needed)
+4. [ ] **Deploy** the application
+5. [ ] **Test API Routes**:
+   - Visit `https://your-app.vercel.app/api/influxdb/latest?machineId=machine-01`
+   - Should return data (not error)
+6. [ ] **Test Frontend**:
+   - Visit `https://your-app.vercel.app`
+   - Check browser console for errors
+   - Verify data loads correctly
+
+### Post-Deployment Verification
+
+- [ ] Frontend loads without errors
+- [ ] API routes respond correctly
+- [ ] Data displays in dashboard
+- [ ] Chat functionality works (if using AI features)
+- [ ] No CORS errors in browser console
+- [ ] Environment variables are set correctly
+
+---
+
+## Troubleshooting
+
+### Issue: API Routes Return 500 Errors
+
+**Symptoms:**
+- API calls fail with 500 status
+- Vercel function logs show connection errors
+
+**Solutions:**
+1. Check environment variables are set in Vercel
+2. Verify InfluxDB/MQTT URLs are public (not localhost)
+3. Check security groups/firewalls allow Vercel IPs
+4. Verify credentials (tokens, API keys) are correct
+
+### Issue: "Cannot connect to InfluxDB"
+
+**Symptoms:**
+- Error: `ECONNREFUSED` or `ETIMEDOUT`
+- API routes can't reach InfluxDB
+
+**Solutions:**
+1. Ensure `INFLUXDB_URL` is a public URL (not `localhost`)
+2. Check InfluxDB is accessible from internet
+3. Verify firewall rules allow inbound connections on port 8086
+4. Test connection manually: `curl https://your-influxdb.com:8086/health`
+
+### Issue: Environment Variables Not Working
+
+**Symptoms:**
+- API routes use default values instead of Vercel env vars
+- `process.env.INFLUXDB_URL` returns `undefined`
+
+**Solutions:**
+1. Ensure variables are added in Vercel dashboard (Settings → Environment Variables)
+2. **Redeploy** after adding/changing environment variables
+3. Check variable names match exactly (case-sensitive)
+4. Verify variables don't have `NEXT_PUBLIC_` prefix (unless needed in browser)
+
+### Issue: CORS Errors
+
+**Symptoms:**
+- Browser console shows CORS errors
+- Requests blocked by browser
+
+**Solutions:**
+1. This shouldn't happen with Next.js API routes (same origin)
+2. If using direct InfluxDB calls from browser, configure CORS in InfluxDB
+3. Better: Use API routes as proxy (recommended approach)
+
+### Issue: Cold Start Delays
+
+**Symptoms:**
+- First API request is slow (2-5 seconds)
+- Subsequent requests are fast
+
+**Solutions:**
+1. This is normal for serverless functions
+2. Use Vercel Pro plan for better performance
+3. Implement request queuing/retry logic in frontend
+4. Consider keeping functions warm (ping endpoint periodically)
+
+---
+
+## Available API Endpoints
+
+### InfluxDB Endpoints
+
+- `POST /api/influxdb/query` - Execute Flux query
+- `GET /api/influxdb/latest?machineId=machine-01` - Get latest tag values
+- `GET /api/influxdb/vibration?machineId=lathe01` - Get vibration data
+- `GET /api/influxdb/downtime?machineId=machine-01` - Get downtime stats
+
+### Service Management
+
+- `POST /api/services/start` - Start a service (influxdb_writer, mock_plc)
+- `POST /api/services/stop` - Stop a service
+- `GET /api/services/status` - Get service status
+- `GET /api/services/logs` - Get service logs
+
+### AI & Chat
+
+- `POST /api/chat` - AI chat with RAG
+- `POST /api/alarms/rag` - Alarm RAG queries
+
+### Work Orders
+
+- `GET /api/work-orders` - List work orders
+- `POST /api/work-order` - Create work order
+- `GET /api/work-order/autofill` - Auto-fill work order from alarm
+
+### Workflows
+
+- `POST /api/workflows/execute` - Execute workflow
+- `GET /api/workflows/list` - List saved workflows
+- `POST /api/workflows/save` - Save workflow
+- `GET /api/workflows/load?id=xxx` - Load workflow
+
+---
+
+## Summary
+
+### Key Takeaways
+
+1. **No Separate Backend**: Backend is Next.js API routes in `frontend/app/api/`
+2. **Vercel Deployment**: API routes become serverless functions automatically
+3. **Environment Variables**: Must be set in Vercel dashboard (not just `.env.local`)
+4. **Public URLs Required**: InfluxDB/MQTT must be accessible from internet (not localhost)
+5. **Security**: Server-only env vars (no `NEXT_PUBLIC_`) keep credentials safe
+
+### Architecture Benefits
+
+- ✅ Single codebase and deployment
+- ✅ Type-safe communication between frontend and backend
+- ✅ Automatic serverless scaling on Vercel
+- ✅ No CORS issues
+- ✅ Secure credential handling
+
+### Next Steps
+
+1. Deploy InfluxDB and MQTT to cloud or AWS EC2/ECS
+2. Configure environment variables in Vercel
+3. Deploy frontend to Vercel
+4. Test all API endpoints
+5. Monitor Vercel function logs for any issues
+
+---
+
+**Last Updated**: December 2024  
+**Document Version**: 1.0
+

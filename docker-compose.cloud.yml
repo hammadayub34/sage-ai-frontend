@@ -1,0 +1,112 @@
+# Cloud-optimized Docker Compose
+# Use this for cloud deployments (Railway, Render, etc.)
+version: '3.8'
+
+services:
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt-broker-cloud
+    ports:
+      - "${MQTT_PORT:-8883}:8883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+    command: mosquitto -c /mosquitto/config/mosquitto.railway.conf
+    environment:
+      - MQTT_PORT=${MQTT_PORT:-1883}
+
+  # InfluxDB
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb-cloud
+    ports:
+      - "${INFLUXDB_PORT:-8086}:8086"
+    volumes:
+      - ./influxdb/data:/var/lib/influxdb2
+      - ./influxdb/config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD:-admin123}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-myorg}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-plc_data_new}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-my-super-secret-auth-token}
+    restart: unless-stopped
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-cloud
+    ports:
+      - "${GRAFANA_PORT:-3004}:3000"
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+
+  # InfluxDB Writer Service
+  influxdb-writer:
+    build:
+      context: .
+      dockerfile: Dockerfile.influxdb-writer
+    container_name: influxdb-writer-cloud
+    environment:
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mosquitto}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-influxdb_writer}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-influxdb_writer_pass}
+      - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED:-false}
+      - CA_CERT_PATH=${CA_CERT_PATH:-mosquitto/config/certs/ca.crt}
+      - INFLUXDB_URL=${INFLUXDB_URL:-http://influxdb:8086}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-my-super-secret-auth-token}
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-myorg}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET:-plc_data_new}
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - influxdb
+
+  # Mock PLC Agent (optional - for testing)
+  mock-plc:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-plc
+    container_name: mock-plc-cloud
+    environment:
+      - MQTT_BROKER_HOST=${MQTT_BROKER_HOST:-mosquitto}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-edge_gateway}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-edge_gateway_pass}
+      - MQTT_TLS_ENABLED=${MQTT_TLS_ENABLED:-false}
+      - CA_CERT_PATH=${CA_CERT_PATH:-mosquitto/config/certs/ca.crt}
+      - MACHINE_ID=${MACHINE_ID:-machine-01}
+      - PUBLISH_INTERVAL=${PUBLISH_INTERVAL:-2.0}
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend-cloud
+    ports:
+      - "${FRONTEND_PORT:-3005}:3005"
+    environment:
+      - NEXT_PUBLIC_INFLUXDB_URL=${NEXT_PUBLIC_INFLUXDB_URL:-http://influxdb:8086}
+      - NEXT_PUBLIC_INFLUXDB_TOKEN=${NEXT_PUBLIC_INFLUXDB_TOKEN:-my-super-secret-auth-token}
+      - NEXT_PUBLIC_INFLUXDB_ORG=${NEXT_PUBLIC_INFLUXDB_ORG:-myorg}
+      - NEXT_PUBLIC_INFLUXDB_BUCKET=${NEXT_PUBLIC_INFLUXDB_BUCKET:-plc_data_new}
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+

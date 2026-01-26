@@ -24,7 +24,7 @@ interface Machine {
   machineName: string;
   labId: string;
   status: 'active' | 'inactive';
-  description?: string;
+  description: string;
 }
 
 interface ScheduledHoursResponse {
@@ -117,14 +117,22 @@ export default function ScheduledHoursPage() {
   const [calculationSteps, setCalculationSteps] = useState<CalculationStep[]>([]);
   const [showQueryDetails, setShowQueryDetails] = useState(false);
   const [showCalculationLog, setShowCalculationLog] = useState(false);
+  const [showQueryCalculationDetails, setShowQueryCalculationDetails] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [rawQueryData, setRawQueryData] = useState<{
+    parameters: any;
+    mongoQuery: any;
+    rawResults: any[];
+    calculationSteps: any[];
+  } | null>(null);
+
+  // AI Analysis state
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-  const [showAnalysis, setShowAnalysis] = useState(false);
-  const [showJsonData, setShowJsonData] = useState(false);
-  const [jsonDataForDisplay, setJsonDataForDisplay] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
+  const [showAnalysis, setShowAnalysis] = useState(true); // Auto-expand
   const isAnalysisInProgress = useRef(false);
-  const lastAnalysisDataKey = useRef<string | null>(null);
+  const lastAnalysisFingerprint = useRef<string>('');
+  const dataGeneration = useRef(0); // Tracks which "generation" of data we're on
 
   // Initialize dateRange to Last 7 Days (default)
   const getLast7DaysRange = () => {
@@ -138,6 +146,12 @@ export default function ScheduledHoursPage() {
   };
   const [dateRange, setDateRange] = useState<{ startDate: Date; endDate: Date }>(getLast7DaysRange());
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  // Increment generation whenever selections change (Layer 1: Race Condition Prevention)
+  useEffect(() => {
+    dataGeneration.current += 1;
+    console.log(`[Data Generation] Incremented to ${dataGeneration.current} due to selection change`);
+  }, [selectedLabId, selectedShift, selectedMachineId, dateRange]);
 
   // Check if user is logged in
   useEffect(() => {
@@ -272,6 +286,9 @@ export default function ScheduledHoursPage() {
       return;
     }
 
+    // Capture generation at start (Layer 1: Race Condition Prevention)
+    const currentGeneration = dataGeneration.current;
+    
     setLoadingScheduledHours(true);
     const steps: CalculationStep[] = [];
     
@@ -314,6 +331,12 @@ export default function ScheduledHoursPage() {
       
       const data: ScheduledHoursResponse = await response.json();
       console.log('[Scheduled Hours] Response:', data);
+      
+      // Only update state if this is still the current generation (Layer 1: Race Condition Prevention)
+      if (currentGeneration !== dataGeneration.current) {
+        console.warn(`[Data Generation] Discarding stale scheduled hours data (generation ${currentGeneration} vs current ${dataGeneration.current})`);
+        return;
+      }
       
       if (data.success && data.shiftInfo) {
         steps.push({
@@ -364,11 +387,6 @@ export default function ScheduledHoursPage() {
     setScheduledHoursData(null); // Clear scheduled hours data
     setUtilizationData(null); // Clear utilization data
     setQueryInfo(null); // Clear query info
-    setAnalysis(null); // Clear previous analysis
-    setJsonDataForDisplay(null); // Clear previous JSON
-    
-    // Reset the analysis data key to force new analysis when new lab data loads
-    lastAnalysisDataKey.current = null;
     
     // Set new lab ID
     setSelectedLabId(labId);
@@ -714,161 +732,6 @@ export default function ScheduledHoursPage() {
     });
   };
 
-  // Get all page data as JSON structure (memoized to prevent unnecessary recreations)
-  const getAllPageData = useCallback(() => {
-    // Always use the latest state values - find current selections
-    const selectedLab = labs.find(l => l._id === selectedLabId);
-    
-    // Only find machine if machineId is set AND it exists in current machines array
-    // This prevents using stale machine data from previous lab
-    let selectedMachine = null;
-    if (selectedMachineId && machines.length > 0) {
-      const foundMachine = machines.find(m => m._id === selectedMachineId);
-      // Validate: machine must exist in current machines array (which is filtered by current lab)
-      if (foundMachine) {
-        selectedMachine = foundMachine;
-      } else {
-        // Machine ID exists but not in current machines array - likely from previous lab
-        console.warn('[getAllPageData] Selected machine ID not found in current machines array, clearing machine selection');
-      }
-    }
-    
-    const selectedShiftObj = labShifts.find(s => s.name === selectedShift);
-    
-    // Log current state to verify it's fresh
-    console.log('[getAllPageData] ✅ Generating fresh JSON with current state:', {
-      selectedLabId,
-      selectedLabName: selectedLab?.name || 'none',
-      selectedMachineId: selectedMachineId || 'none',
-      selectedMachineName: selectedMachine?.machineName || 'none',
-      machinesCount: machines.length,
-      machineIdsInArray: machines.map(m => m._id),
-      selectedShift: selectedShift || 'none',
-      dateRange: `${formatDateForAPI(dateRange.startDate)} to ${formatDateForAPI(dateRange.endDate)}`
-    });
-
-    return {
-      timestamp: new Date().toISOString(),
-      page: 'Insights',
-      user: {
-        id: user?._id || null,
-        name: user?.name || null,
-        email: user?.email || null,
-      },
-      selections: {
-        lab: {
-          id: selectedLabId,
-          name: selectedLab?.name || null,
-        },
-        machine: {
-          id: selectedMachine && selectedMachineId ? selectedMachineId : null,
-          name: selectedMachine?.machineName || null,
-          description: selectedMachine?.description || null,
-        },
-        shift: {
-          name: selectedShift,
-          startTime: selectedShiftObj?.startTime || null,
-          endTime: selectedShiftObj?.endTime || null,
-        },
-        dateRange: {
-          startDate: formatDateForAPI(dateRange.startDate),
-          endDate: formatDateForAPI(dateRange.endDate),
-          startDateISO: dateRange.startDate.toISOString(),
-          endDateISO: dateRange.endDate.toISOString(),
-        },
-      },
-      scheduledHours: {
-        loading: loadingScheduledHours,
-        data: scheduledHoursData ? {
-          success: scheduledHoursData.success,
-          scheduledHours: scheduledHoursData.scheduledHours,
-          shiftInfo: scheduledHoursData.shiftInfo ? {
-            shiftName: scheduledHoursData.shiftInfo.shiftName,
-            startTime: scheduledHoursData.shiftInfo.startTime,
-            endTime: scheduledHoursData.shiftInfo.endTime,
-            shiftDuration: scheduledHoursData.shiftInfo.shiftDuration,
-            numberOfDays: scheduledHoursData.shiftInfo.numberOfDays,
-          } : null,
-          error: scheduledHoursData.error || null,
-        } : null,
-        apiCall: {
-          endpoint: '/api/scheduled-hours',
-          parameters: {
-            labId: selectedLabId,
-            shiftName: selectedShift,
-            startDate: formatDateForAPI(dateRange.startDate),
-            endDate: formatDateForAPI(dateRange.endDate),
-          },
-        },
-      },
-      utilization: {
-        loading: loadingUtilization,
-        data: utilizationData ? {
-          success: utilizationData.success,
-          shiftName: utilizationData.data?.shiftName || null,
-          totalMachines: utilizationData.data?.totalMachines || null,
-          machinesWithData: utilizationData.data?.machinesWithData || null,
-          averageUtilization: utilizationData.data?.averageUtilization || null,
-          totalProductiveHours: utilizationData.data?.totalProductiveHours || null,
-          totalIdleHours: utilizationData.data?.totalIdleHours || null,
-          totalScheduledHours: utilizationData.data?.totalScheduledHours || null,
-          totalNonProductiveHours: utilizationData.data?.totalNonProductiveHours || null,
-          totalNodeOffHours: utilizationData.data?.totalNodeOffHours || null,
-          machineUtilizations: utilizationData.data?.machineUtilizations || [],
-          error: utilizationData.error || null,
-        } : null,
-        apiCall: {
-          endpoint: '/api/shift-utilization',
-          parameters: {
-            labId: selectedLabId,
-            shiftName: selectedShift,
-            startDate: formatDateForAPI(dateRange.startDate),
-            endDate: formatDateForAPI(dateRange.endDate),
-            machineName: selectedMachine && selectedMachineId ? selectedMachine.machineName : null,
-          },
-        },
-      },
-      queryInfo: {
-        loading: loadingQueryInfo,
-        data: queryInfo ? {
-          success: queryInfo.success,
-          collection: queryInfo.collection,
-          database: queryInfo.database,
-          recordCount: queryInfo.recordCount,
-          lastSeenDate: queryInfo.lastSeenDate,
-          lastSeenRecord: queryInfo.lastSeenRecord,
-          query: queryInfo.query,
-          parameters: queryInfo.parameters,
-          error: queryInfo.error || null,
-        } : null,
-        apiCall: {
-          endpoint: '/api/shift-utilization/query-info',
-          parameters: {
-            labId: selectedLabId,
-            shiftName: selectedShift,
-            startDate: formatDateForAPI(dateRange.startDate),
-            endDate: formatDateForAPI(dateRange.endDate),
-            machineName: selectedMachine && selectedMachineId ? selectedMachine.machineName : null,
-          },
-        },
-      },
-      calculationSteps: calculationSteps,
-      availableData: {
-        labs: labs.map(l => ({ id: l._id, name: l.name })),
-        machines: machines.map(m => ({ 
-          id: m._id, 
-          name: m.machineName, 
-          description: m.description || null 
-        })),
-        shifts: labShifts.map(s => ({ 
-          name: s.name, 
-          startTime: s.startTime, 
-          endTime: s.endTime 
-        })),
-      },
-    };
-  }, [selectedLabId, selectedMachineId, selectedShift, dateRange, labs, machines, labShifts, user, scheduledHoursData, utilizationData, loadingScheduledHours, loadingUtilization, queryInfo, loadingQueryInfo, calculationSteps]);
-
   // Fetch query info and last seen date
   const fetchQueryInfo = useCallback(async () => {
     if (!selectedLabId || !selectedShift) {
@@ -876,6 +739,9 @@ export default function ScheduledHoursPage() {
       setCalculationSteps([]);
       return;
     }
+
+    // Capture generation at start (Layer 1: Race Condition Prevention)
+    const currentGeneration = dataGeneration.current;
 
     setLoadingQueryInfo(true);
     const steps: CalculationStep[] = [];
@@ -927,6 +793,13 @@ export default function ScheduledHoursPage() {
       }
       
       const data: QueryInfo = await response.json();
+      
+      // Only update state if this is still the current generation (Layer 1: Race Condition Prevention)
+      if (currentGeneration !== dataGeneration.current) {
+        console.warn(`[Data Generation] Discarding stale query info data (generation ${currentGeneration} vs current ${dataGeneration.current})`);
+        return;
+      }
+      
       setQueryInfo(data);
       
       if (data.success) {
@@ -969,6 +842,9 @@ export default function ScheduledHoursPage() {
       setUtilizationData(null);
       return;
     }
+
+    // Capture generation at start (Layer 1: Race Condition Prevention)
+    const currentGeneration = dataGeneration.current;
 
     setLoadingUtilization(true);
     const steps: CalculationStep[] = [];
@@ -1021,6 +897,7 @@ export default function ScheduledHoursPage() {
       }
       
       const data: UtilizationData = await response.json();
+      
       steps.push({
         step: 3,
         description: 'API response received',
@@ -1044,8 +921,26 @@ export default function ScheduledHoursPage() {
         });
       }
       
+      // Only update state if this is still the current generation (Layer 1: Race Condition Prevention)
+      if (currentGeneration !== dataGeneration.current) {
+        console.warn(`[Data Generation] Discarding stale utilization data (generation ${currentGeneration} vs current ${dataGeneration.current})`);
+        return;
+      }
+      
       setUtilizationData(data);
       setCalculationSteps(prev => [...prev, ...steps]);
+      
+      // Store raw query data for display
+      if (data.success && data.data && (data.data as any)._debug) {
+        setRawQueryData({
+          parameters: (data.data as any)._debug.queryParameters,
+          mongoQuery: (data.data as any)._debug.mongoQuery,
+          rawResults: (data.data as any)._debug.rawResults || [],
+          calculationSteps: (data.data as any)._debug.calculationSteps || [],
+        });
+      } else {
+        setRawQueryData(null);
+      }
       
       if (!data.success) {
         toast.error(data.error || 'Failed to fetch utilization data');
@@ -1065,6 +960,282 @@ export default function ScheduledHoursPage() {
     }
   }, [selectedLabId, selectedShift, selectedMachineId, machines, dateRange]);
 
+  // Layer 2: Data Freshness Validation
+  const validateDataFreshness = useCallback(() => {
+    // Check scheduled hours matches current shift
+    const scheduledShift = scheduledHoursData?.data?.shiftInfo?.shiftName;
+    if (scheduledShift && scheduledShift !== selectedShift) {
+      console.warn('[Data Validation] Scheduled hours shift mismatch:', scheduledShift, 'vs', selectedShift);
+      return false;
+    }
+    
+    // Check utilization matches current shift
+    const utilizationShift = utilizationData?.data?.shiftName;
+    if (utilizationShift && utilizationShift !== selectedShift) {
+      console.warn('[Data Validation] Utilization shift mismatch:', utilizationShift, 'vs', selectedShift);
+      return false;
+    }
+    
+    // Check query info matches current selections
+    const queryShift = queryInfo?.parameters?.shiftName;
+    const queryLabId = queryInfo?.parameters?.labId;
+    if (queryShift && queryShift !== selectedShift) {
+      console.warn('[Data Validation] Query info shift mismatch:', queryShift, 'vs', selectedShift);
+      return false;
+    }
+    if (queryLabId && queryLabId !== selectedLabId) {
+      console.warn('[Data Validation] Query info lab mismatch:', queryLabId, 'vs', selectedLabId);
+      return false;
+    }
+    
+    // Check date ranges match
+    const queryStartDate = queryInfo?.parameters?.startDate;
+    const queryEndDate = queryInfo?.parameters?.endDate;
+    const currentStartDate = formatDateForAPI(dateRange.startDate);
+    const currentEndDate = formatDateForAPI(dateRange.endDate);
+    if (queryStartDate && queryStartDate !== currentStartDate) {
+      console.warn('[Data Validation] Query start date mismatch:', queryStartDate, 'vs', currentStartDate);
+      return false;
+    }
+    if (queryEndDate && queryEndDate !== currentEndDate) {
+      console.warn('[Data Validation] Query end date mismatch:', queryEndDate, 'vs', currentEndDate);
+      return false;
+    }
+    
+    return true;
+  }, [selectedLabId, selectedShift, dateRange, scheduledHoursData, utilizationData, queryInfo]);
+
+  // Layer 3: Data Fingerprint Generation
+  const generateDataFingerprint = useCallback(() => {
+    // Include selections
+    const selectionsKey = `${selectedLabId}-${selectedMachineId || 'all'}-${selectedShift}-${formatDateForAPI(dateRange.startDate)}-${formatDateForAPI(dateRange.endDate)}`;
+    
+    // Include actual API response data (ensures same selections with different data triggers new analysis)
+    const scheduledHours = scheduledHoursData?.scheduledHours || 0;
+    const utilization = utilizationData?.data?.averageUtilization || 0;
+    const machineCount = utilizationData?.data?.machinesWithData || 0;
+    
+    return `${selectionsKey}-${scheduledHours}-${utilization}-${machineCount}`;
+  }, [selectedLabId, selectedMachineId, selectedShift, dateRange, scheduledHoursData, utilizationData]);
+
+  // Collect all API data for AI analysis
+  const collectAllAPIData = useCallback(() => {
+    // Get lab name from labs API response (API Call #1 or #2)
+    const selectedLabFromAPI = labs.find(l => l._id === selectedLabId);
+    const labName = selectedLabFromAPI?.name || null;
+    const labId = selectedLabId || null;
+    
+    // Get shift info from scheduled-hours API response (API Call #4)
+    const shiftName = scheduledHoursData?.data?.shiftInfo?.shiftName || selectedShift || null;
+    const shiftStartTime = scheduledHoursData?.data?.shiftInfo?.startTime || null;
+    const shiftEndTime = scheduledHoursData?.data?.shiftInfo?.endTime || null;
+    
+    // CRITICAL: Get selected machine name from CURRENT dropdown selection, not from API response
+    // This ensures we always use the latest selection, not stale API data
+    const selectedMachine = selectedMachineId && machines.length > 0 
+      ? machines.find(m => m._id === selectedMachineId) 
+      : null;
+    const selectedMachineNameFromDropdown = selectedMachine?.machineName || null;
+    const isSpecificMachine = !!selectedMachineNameFromDropdown;
+    
+    // Get all machine names from utilization API response (API Call #6)
+    const machineUtilizations = utilizationData?.data?.machineUtilizations || [];
+    const allMachineNames = machineUtilizations.map(m => m.machineName);
+    
+    // Find the selected machine's data from utilization API response using CURRENT selection
+    const selectedMachineData = isSpecificMachine && machineUtilizations.length > 0 && selectedMachineNameFromDropdown
+      ? machineUtilizations.find(m => m.machineName === selectedMachineNameFromDropdown) || null
+      : null;
+
+    // Get selected lab and shift objects
+    const selectedLab = selectedLabFromAPI || null;
+    const selectedShiftObj = labShifts.find(s => s.name === selectedShift) || null;
+
+    return {
+      timestamp: new Date().toISOString(),
+      selections: {
+        lab: {
+          id: labId,
+          name: labName, // From labs API response (API Call #1 or #2)
+        },
+        machine: {
+          name: selectedMachineNameFromDropdown || null, // From CURRENT dropdown selection
+          isSelected: isSpecificMachine,
+          selectionType: isSpecificMachine ? 'Specific Machine' : 'All Machines',
+        },
+        shift: {
+          name: shiftName, // From scheduled-hours API response
+          startTime: shiftStartTime, // From scheduled-hours API response
+          endTime: shiftEndTime, // From scheduled-hours API response
+        },
+        dateRange: {
+          startDate: formatDateForAPI(dateRange.startDate),
+          endDate: formatDateForAPI(dateRange.endDate),
+          displayText: `${formatDate(dateRange.startDate)} to ${formatDate(dateRange.endDate)}`,
+        },
+      },
+      apiResults: {
+        // API Call #1: User Labs (already in state)
+        userLabs: {
+          success: labs.length > 0,
+          labCount: labs.length,
+          selectedLab: selectedLab || null,
+        },
+        // API Call #2: Lab Shifts
+        labShifts: {
+          success: labShifts.length > 0,
+          shifts: labShifts,
+          selectedShift: selectedShiftObj || null,
+        },
+        // API Call #3: Machines
+        machines: {
+          success: machines.length > 0,
+          machineCount: machines.length,
+          selectedMachine: selectedMachine || null,
+          allMachines: machines.map(m => ({
+            id: m._id,
+            name: m.machineName,
+            description: m.description,
+            status: m.status,
+          })),
+        },
+        // API Call #4: Scheduled Hours - Shift info comes from here
+        scheduledHours: {
+          loading: loadingScheduledHours,
+          data: scheduledHoursData,
+          shiftInfo: scheduledHoursData?.data?.shiftInfo || null, // Shift name, times from API
+        },
+        // API Call #5: Query Info - Note: We use dropdown selection, not API response for machine name
+        queryInfo: {
+          loading: loadingQueryInfo,
+          data: queryInfo,
+          selectedMachineName: selectedMachineNameFromDropdown || null, // From CURRENT dropdown selection
+        },
+        // API Call #6: Utilization Data - CRITICAL: Contains machine-specific data
+        utilization: {
+          loading: loadingUtilization,
+          data: utilizationData,
+          // Extract machine-specific data for clarity (from API response)
+          machineSpecificData: machineUtilizations, // Already extracted above
+          // Highlight the selected machine's data if a specific machine is selected (from API response)
+          selectedMachineData: selectedMachineData, // Already extracted above
+          // Overall totals across all machines (from API response)
+          overallTotals: utilizationData?.data ? {
+            totalMachines: utilizationData.data.totalMachines,
+            machinesWithData: utilizationData.data.machinesWithData,
+            averageUtilization: utilizationData.data.averageUtilization,
+            totalProductiveHours: utilizationData.data.totalProductiveHours,
+            totalIdleHours: utilizationData.data.totalIdleHours,
+            totalScheduledHours: utilizationData.data.totalScheduledHours,
+            totalNonProductiveHours: utilizationData.data.totalNonProductiveHours,
+            totalNodeOffHours: utilizationData.data.totalNodeOffHours,
+          } : null,
+          // Machine names from API response (source of truth)
+          allMachineNames: allMachineNames,
+        },
+      },
+    };
+  }, [selectedLabId, selectedShift, dateRange, labs, machines, labShifts, scheduledHoursData, queryInfo, utilizationData, loadingScheduledHours, loadingQueryInfo, loadingUtilization, selectedMachineId]);
+
+  // Fetch AI Analysis
+  const fetchAIAnalysis = useCallback(async () => {
+    // Prevent duplicate calls
+    if (isAnalysisInProgress.current) {
+      console.log('[AI Analysis] Already in progress, skipping');
+      return;
+    }
+
+    // Check if all required data is loaded
+    if (
+      !selectedLabId ||
+      !selectedShift ||
+      loadingScheduledHours ||
+      loadingQueryInfo ||
+      loadingUtilization ||
+      !scheduledHoursData?.success ||
+      !queryInfo?.success ||
+      !utilizationData?.success
+    ) {
+      console.warn('[AI Analysis] Data not ready yet');
+      toast.error('Please wait for all data to load before generating analysis');
+      return; // Not ready yet
+    }
+
+    // Validate data freshness
+    if (!validateDataFreshness()) {
+      console.warn('[AI Analysis] Data freshness validation failed');
+      toast.error('Data may be stale. Please refresh the page and try again');
+      return;
+    }
+
+    isAnalysisInProgress.current = true;
+    setLoadingAnalysis(true);
+    setShowAnalysis(true);
+
+    try {
+      // Collect all API results
+      const allData = collectAllAPIData();
+      
+      // CRITICAL: Log the exact data being sent to verify correctness
+      console.log('[AI Analysis] ===== SENDING DATA TO OPENAI =====');
+      console.log('[AI Analysis] Selected Machine (from dropdown):', {
+        machineId: selectedMachineId,
+        machineName: allData.selections.machine.name,
+        isSelected: allData.selections.machine.isSelected,
+        selectionType: allData.selections.machine.selectionType,
+      });
+      console.log('[AI Analysis] Lab:', {
+        id: allData.selections.lab.id,
+        name: allData.selections.lab.name,
+      });
+      console.log('[AI Analysis] Shift:', {
+        name: allData.selections.shift.name,
+        startTime: allData.selections.shift.startTime,
+        endTime: allData.selections.shift.endTime,
+      });
+      console.log('[AI Analysis] Date Range:', allData.selections.dateRange.displayText);
+      console.log('[AI Analysis] Machine-Specific Data:', {
+        totalMachines: allData.apiResults.utilization.machineSpecificData.length,
+        selectedMachineData: allData.apiResults.utilization.selectedMachineData ? {
+          machineName: allData.apiResults.utilization.selectedMachineData.machineName,
+          averageUtilization: allData.apiResults.utilization.selectedMachineData.averageUtilization,
+          totalProductiveHours: allData.apiResults.utilization.selectedMachineData.totalProductiveHours,
+        } : null,
+        allMachineNames: allData.apiResults.utilization.allMachineNames,
+      });
+      console.log('[AI Analysis] Full JSON being sent:', JSON.stringify(allData, null, 2));
+      console.log('[AI Analysis] ====================================');
+    
+      // Send to AI analysis endpoint
+      const response = await fetch('/api/insights/analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allData),
+      });
+    
+      if (!response.ok) {
+        throw new Error('Failed to generate analysis');
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setAnalysis(result.analysis);
+        // Update fingerprint to match the analysis
+        lastAnalysisFingerprint.current = generateDataFingerprint();
+      } else {
+        throw new Error(result.error || 'Failed to generate analysis');
+      }
+    } catch (error: any) {
+      console.error('[AI Analysis] Error:', error);
+      toast.error(error.message || 'Failed to generate AI analysis');
+      setAnalysis(null);
+    } finally {
+      setLoadingAnalysis(false);
+      isAnalysisInProgress.current = false;
+    }
+  }, [selectedLabId, selectedShift, loadingScheduledHours, loadingQueryInfo, loadingUtilization, scheduledHoursData, queryInfo, utilizationData, collectAllAPIData, selectedMachineId, validateDataFreshness, generateDataFingerprint]);
+
   // Fetch scheduled hours when dependencies change
   useEffect(() => {
     fetchScheduledHours();
@@ -1079,6 +1250,16 @@ export default function ScheduledHoursPage() {
   useEffect(() => {
     fetchUtilizationData();
   }, [fetchUtilizationData]);
+
+  // Clear analysis when selections change (so user knows to regenerate)
+  useEffect(() => {
+    const currentFingerprint = generateDataFingerprint();
+    if (currentFingerprint !== lastAnalysisFingerprint.current) {
+      console.log('[AI Analysis] Selections changed, clearing previous analysis');
+      setAnalysis(null);
+      lastAnalysisFingerprint.current = currentFingerprint;
+    }
+  }, [selectedLabId, selectedShift, selectedMachineId, dateRange, generateDataFingerprint]);
 
   // Fetch machines when lab changes (including initial load)
   useEffect(() => {
@@ -1112,143 +1293,6 @@ export default function ScheduledHoursPage() {
     }
   }, [selectedLabId, fetchLabWithShifts]);
 
-  // Extract AI Analysis function
-  const fetchAIAnalysis = useCallback(async (isManual = false) => {
-    // Prevent duplicate calls
-    if (isAnalysisInProgress.current) {
-      return;
-    }
-
-    // Don't analyze if required selections are missing
-    if (!selectedLabId || !selectedShift) {
-      return;
-    }
-
-    isAnalysisInProgress.current = true;
-    setLoadingAnalysis(true);
-    setShowAnalysis(true); // Auto-expand the section
-
-    try {
-      // Get all page data (JSON) - generates FRESH JSON with current selections
-      // This is called every time fetchAIAnalysis runs, so it always has the latest data
-      const jsonData = getAllPageData();
-
-      // Log the JSON being sent to OpenAI
-      console.log('[AI Analysis] ✅ Generating NEW JSON with current selections');
-      console.log('[AI Analysis] Current selections in JSON:', {
-        lab: jsonData.selections?.lab?.name || jsonData.selections?.lab?.id,
-        machine: jsonData.selections?.machine?.name || jsonData.selections?.machine?.id || 'All machines',
-        shift: jsonData.selections?.shift?.name,
-        dateRange: `${jsonData.selections?.dateRange?.startDate} to ${jsonData.selections?.dateRange?.endDate}`
-      });
-      console.log('[AI Analysis] Full JSON being sent to OpenAI:', JSON.stringify(jsonData, null, 2));
-      console.log('[AI Analysis] JSON size:', JSON.stringify(jsonData).length, 'characters');
-
-      // Send to OpenAI for analysis
-      const response = await fetch('/api/insights/analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(jsonData),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setAnalysis(data.analysis);
-        // Only show success toast on manual refresh
-        if (isManual) {
-          toast.success('AI Insights generated successfully!');
-        }
-      } else {
-        throw new Error(data.error || 'Failed to generate analysis');
-      }
-    } catch (error: any) {
-      console.error('[AI Insights] Error:', error);
-      // Only show error toast on manual refresh, not auto-load
-      if (isManual) {
-        toast.error(error.message || 'Failed to generate AI insights');
-      }
-      setAnalysis(null);
-    } finally {
-      setLoadingAnalysis(false);
-      isAnalysisInProgress.current = false;
-    }
-  }, [selectedLabId, selectedShift, selectedMachineId, dateRange, getAllPageData]);
-
-  // Update JSON display whenever ANY selection OR data changes
-  useEffect(() => {
-    // Generate fresh JSON immediately when selections or data changes
-    if (selectedLabId && selectedShift) {
-      const freshJson = getAllPageData();
-      setJsonDataForDisplay(freshJson);
-      console.log('[JSON Update] ✅ Updated JSON display - Selection or data changed:', {
-        labId: selectedLabId,
-        machineId: selectedMachineId || 'all machines',
-        shift: selectedShift,
-        dateRange: `${formatDateForAPI(dateRange.startDate)} to ${formatDateForAPI(dateRange.endDate)}`,
-        hasScheduledHours: !!scheduledHoursData,
-        hasUtilization: !!utilizationData
-      });
-    } else {
-      // Clear JSON if required selections are missing
-      setJsonDataForDisplay(null);
-    }
-  }, [
-    selectedLabId, 
-    selectedMachineId, 
-    selectedShift, 
-    dateRange, 
-    scheduledHoursData, 
-    utilizationData,
-    queryInfo,
-    getAllPageData
-  ]);
-
-  // Auto-trigger AI analysis when all required data is ready
-  useEffect(() => {
-    // Only trigger if all required data is ready
-    if (
-      selectedLabId &&
-      selectedShift &&
-      !loadingScheduledHours &&
-      !loadingUtilization &&
-      scheduledHoursData &&
-      utilizationData &&
-      !isAnalysisInProgress.current
-    ) {
-      // Create a unique key for the current data state to prevent duplicate calls
-      // Include all relevant selections: lab, machine, shift, and date range
-      const dataKey = `${selectedLabId}-${selectedMachineId || 'all'}-${selectedShift}-${formatDateForAPI(dateRange.startDate)}-${formatDateForAPI(dateRange.endDate)}-${scheduledHoursData?.scheduledHours}-${utilizationData?.data?.totalScheduledHours}`;
-      
-      // Only trigger if this is a new data state (prevents duplicate calls for the same data)
-      if (lastAnalysisDataKey.current !== dataKey) {
-        console.log('[AI Analysis Auto-Trigger] Selection changed, generating new JSON and triggering analysis');
-        console.log('[AI Analysis Auto-Trigger] Previous dataKey:', lastAnalysisDataKey.current);
-        console.log('[AI Analysis Auto-Trigger] New dataKey:', dataKey);
-        console.log('[AI Analysis Auto-Trigger] Selections:', {
-          labId: selectedLabId,
-          machineId: selectedMachineId || 'all machines',
-          shift: selectedShift,
-          dateRange: `${formatDateForAPI(dateRange.startDate)} to ${formatDateForAPI(dateRange.endDate)}`
-        });
-        lastAnalysisDataKey.current = dataKey;
-        fetchAIAnalysis(false); // false = auto-trigger, not manual - this will generate fresh JSON
-      } else {
-        console.log('[AI Analysis Auto-Trigger] Data unchanged, skipping analysis (dataKey matches previous)');
-      }
-    }
-  }, [
-    selectedLabId,
-    selectedShift,
-    selectedMachineId,
-    dateRange,
-    scheduledHoursData,
-    utilizationData,
-    loadingScheduledHours,
-    loadingUtilization,
-    fetchAIAnalysis,
-  ]);
 
   // Format date for display
   const formatDate = (date: Date) => {
@@ -1384,77 +1428,52 @@ export default function ScheduledHoursPage() {
           </div>
         </div>
 
-        {/* JSON Data Display - Always visible when selections are made */}
-        {jsonDataForDisplay && selectedLabId && selectedShift && (
-          <div className="bg-dark-panel border border-dark-border rounded-lg p-6 mb-6">
-            <div className="flex items-center justify-end mb-4">
-              <button
-                onClick={() => setShowJsonData(!showJsonData)}
-                className="flex items-center gap-2 text-xs text-gray-400 hover:text-white px-2 py-1 border border-dark-border rounded"
-              >
-                {showJsonData ? (
-                  <>
-                    <ChevronDownIcon className="w-3 h-3" />
-                    Hide JSON
-                  </>
-                ) : (
-                  <>
-                    <ChevronRightIcon className="w-3 h-3" />
-                    Show JSON
-                  </>
-                )}
-              </button>
-            </div>
-            
-            {/* JSON Data Display */}
-            {showJsonData && (
-              <div className="bg-black border border-dark-border rounded-lg p-4">
-                <div className="mb-2 text-xs text-gray-500">
-                  This JSON is automatically updated when you change lab, machine, shift, or date range.
-                  It will be sent to OpenAI when analysis is triggered.
-                </div>
-                <pre className="text-xs text-green-400 font-mono overflow-x-auto max-h-96 overflow-y-auto">
-                  {JSON.stringify(jsonDataForDisplay, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* AI Analysis Display */}
-        {(analysis || loadingAnalysis) && (
+        {/* AI Analysis Section */}
+        {selectedLabId && selectedShift && (
           <div className="bg-dark-panel border border-dark-border rounded-lg p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">AI Analysis</h2>
-              <button
-                onClick={() => setShowAnalysis(!showAnalysis)}
-                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white"
-              >
-                {showAnalysis ? (
-                  <>
-                    <ChevronDownIcon className="w-4 h-4" />
-                    Hide
-                  </>
-                ) : (
-                  <>
-                    <ChevronRightIcon className="w-4 h-4" />
-                    Show
-                  </>
-                )}
-              </button>
+              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-sage-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI Analysis
+              </h2>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    fetchAIAnalysis();
+                    // Auto-expand when generating
+                    if (!showAnalysis) {
+                      setShowAnalysis(true);
+                    }
+                  }}
+                  disabled={loadingAnalysis || loadingScheduledHours || loadingQueryInfo || loadingUtilization}
+                  className="px-4 py-2 bg-sage-500 hover:bg-sage-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingAnalysis ? 'Generating...' : 'Generate Analysis'}
+                </button>
+                <button
+                  onClick={() => setShowAnalysis(!showAnalysis)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  {showAnalysis ? '▼' : '▶'}
+                </button>
+              </div>
             </div>
-            
+
             {showAnalysis && (
-              <>
+              <div>
                 {loadingAnalysis ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sage-400"></div>
-                    <span className="ml-3 text-gray-400">Generating analysis...</span>
+                    <div className="flex items-center gap-2 text-sage-400 animate-pulse">
+                      <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="font-medium">Analyzing data...</span>
+                    </div>
                   </div>
                 ) : analysis ? (
-                  <div className="bg-dark-bg border border-dark-border rounded-lg p-6">
+                  <div className="pt-4">
                     <div className="prose prose-invert max-w-none">
-                      <div className="text-gray-300 leading-relaxed">
+                      <div className="text-gray-300 whitespace-pre-wrap leading-relaxed">
                         {analysis.split('\n').map((line, index, array) => {
                           // Remove markdown formatting
                           let cleanLine = line.trim();
@@ -1487,29 +1506,26 @@ export default function ScheduledHoursPage() {
                           
                           // Regular paragraph
                           return (
-                            <p key={index} className="mb-3 last:mb-0 text-gray-300">
+                            <p key={index} className="mb-3 last:mb-0">
                               {cleanLine}
                             </p>
                           );
                         })}
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(analysis);
-                        toast.success('Analysis copied to clipboard!');
-                      }}
-                      className="mt-4 px-3 py-1 bg-sage-500 hover:bg-sage-600 text-white text-sm rounded transition-colors"
-                    >
-                      Copy Analysis
-                    </button>
                   </div>
                 ) : (
-                  <div className="text-gray-400 py-4">
-                    Click "AI Insights" to generate insights from the page data.
+                  <div className="p-4 bg-sage-500/10 border border-sage-500/30 rounded text-center">
+                    <span className="text-sage-400 text-sm">
+                      {!selectedLabId || !selectedShift
+                        ? 'Please select a lab and shift to generate analysis'
+                        : loadingScheduledHours || loadingQueryInfo || loadingUtilization
+                        ? 'Loading data... Please wait for all data to load, then click "Generate Analysis" button.'
+                        : 'Click the "Generate Analysis" button above to generate AI analysis with the current selections.'}
+                    </span>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         )}
@@ -1801,16 +1817,16 @@ export default function ScheduledHoursPage() {
                           <tr key={idx} className="border-b border-dark-border/50">
                             <td className="py-2 px-4 text-gray-300">{machine.machineName || 'N/A'}</td>
                             <td className="py-2 px-4 text-right text-sage-400">
-                              {(machine.utilization ?? 0).toFixed(2)}%
+                              {(machine.averageUtilization ?? 0).toFixed(2)}%
                             </td>
                             <td className="py-2 px-4 text-right text-green-400">
-                              {(machine.productiveHours ?? 0).toFixed(2)}h
+                              {(machine.totalProductiveHours ?? 0).toFixed(2)}h
                             </td>
                             <td className="py-2 px-4 text-right text-yellow-400">
-                              {(machine.idleHours ?? 0).toFixed(2)}h
+                              {(machine.totalIdleHours ?? 0).toFixed(2)}h
                             </td>
                             <td className="py-2 px-4 text-right text-gray-300">
-                              {(machine.scheduledHours ?? 0).toFixed(2)}h
+                              {(machine.totalScheduledHours ?? 0).toFixed(2)}h
                             </td>
                           </tr>
                         ))}
@@ -1830,6 +1846,158 @@ export default function ScheduledHoursPage() {
             </div>
           ) : null}
         </div>
+
+        {/* Query Parameters, Raw Results, and Calculation Details */}
+        {rawQueryData && utilizationData?.success && (
+          <div className="bg-dark-panel border border-dark-border rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white">Query Details & Calculations</h2>
+              <button
+                onClick={() => setShowQueryCalculationDetails(!showQueryCalculationDetails)}
+                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white"
+              >
+                {showQueryCalculationDetails ? (
+                  <>
+                    <ChevronDownIcon className="w-4 h-4" />
+                    Hide Details
+                  </>
+                ) : (
+                  <>
+                    <ChevronRightIcon className="w-4 h-4" />
+                    Show Details
+                  </>
+                )}
+              </button>
+            </div>
+
+            {showQueryCalculationDetails && (
+              <div className="space-y-6">
+                {/* Query Parameters */}
+                <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">Query Parameters Passed to API</h3>
+                  <div className="bg-black/30 border border-dark-border rounded p-3 font-mono text-xs space-y-2">
+                    <div className="text-gray-400">
+                      <span className="text-sage-400">labId:</span> <span className="text-gray-300">{rawQueryData.parameters.labId}</span>
+                    </div>
+                    <div className="text-gray-400">
+                      <span className="text-sage-400">shiftName:</span> <span className="text-gray-300">{rawQueryData.parameters.shiftName}</span>
+                    </div>
+                    <div className="text-gray-400">
+                      <span className="text-sage-400">machineName:</span> <span className="text-gray-300">{rawQueryData.parameters.machineName}</span>
+                    </div>
+                    <div className="text-gray-400">
+                      <span className="text-sage-400">startDate:</span> <span className="text-gray-300">{rawQueryData.parameters.startDate}</span>
+                    </div>
+                    <div className="text-gray-400">
+                      <span className="text-sage-400">endDate:</span> <span className="text-gray-300">{rawQueryData.parameters.endDate}</span>
+                    </div>
+                    <div className="text-gray-400">
+                      <span className="text-sage-400">machineNames (array):</span> 
+                      <div className="ml-4 mt-1 text-gray-300">
+                        {Array.isArray(rawQueryData.parameters.machineNames) 
+                          ? JSON.stringify(rawQueryData.parameters.machineNames, null, 2)
+                          : rawQueryData.parameters.machineNames}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* MongoDB Query */}
+                <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">MongoDB Query Executed</h3>
+                  <div className="bg-black/30 border border-dark-border rounded p-3">
+                    <pre className="text-xs text-green-400 font-mono overflow-x-auto">
+                      {JSON.stringify(rawQueryData.mongoQuery, null, 2)}
+                    </pre>
+                    <div className="mt-2 text-xs text-gray-500">
+                      Collection: <span className="text-gray-300">labShiftUtilization</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Raw Results from MongoDB */}
+                <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">
+                    Raw MongoDB Results 
+                    <span className="text-sm text-gray-400 ml-2">
+                      ({rawQueryData.rawResults.length} of {utilizationData.data?.machinesWithData || 0} records shown)
+                    </span>
+                  </h3>
+                  <div className="bg-black/30 border border-dark-border rounded p-3 max-h-96 overflow-y-auto">
+                    <pre className="text-xs text-yellow-400 font-mono">
+                      {JSON.stringify(rawQueryData.rawResults, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+
+                {/* Calculation Steps */}
+                <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">Step-by-Step Utilization Calculation</h3>
+                  <div className="space-y-4">
+                    {rawQueryData.calculationSteps.map((step: any, idx: number) => (
+                      <div key={idx} className="bg-black/30 border border-dark-border rounded p-3">
+                        <div className="text-sm font-semibold text-white mb-2">
+                          Machine: <span className="text-sage-400">{step.machineName}</span>
+                        </div>
+                        <div className="text-xs text-gray-400 space-y-1">
+                          <div>
+                            <span className="text-sage-400">Records found:</span> <span className="text-gray-300">{step.recordCount}</span>
+                          </div>
+                          <div>
+                            <span className="text-sage-400">Sum of utilization values:</span> <span className="text-gray-300">{step.rawUtilizationSum.toFixed(2)}</span>
+                          </div>
+                          <div className="pt-2 border-t border-dark-border">
+                            <span className="text-sage-400">Calculation:</span>
+                            <div className="ml-4 mt-1 text-gray-300 font-mono">
+                              {step.calculation}
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-dark-border">
+                            <span className="text-sage-400">Totals:</span>
+                            <div className="ml-4 mt-1 text-gray-300 space-y-1">
+                              <div>Productive: {step.totals.productiveHours.toFixed(2)}h</div>
+                              <div>Idle: {step.totals.idleHours.toFixed(2)}h</div>
+                              <div>Scheduled: {step.totals.scheduledHours.toFixed(2)}h</div>
+                              <div>Non-Productive: {step.totals.nonProductiveHours.toFixed(2)}h</div>
+                              <div>Node Off: {step.totals.nodeOffHours.toFixed(2)}h</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Overall Calculation */}
+                    {utilizationData.data && (utilizationData.data as any)._debug?.overallCalculation && (
+                      <div className="bg-black/30 border border-dark-border rounded p-3 mt-4">
+                        <div className="text-sm font-semibold text-white mb-2">Overall Weighted Average Utilization</div>
+                        <div className="text-xs text-gray-400 space-y-1">
+                          <div>
+                            <span className="text-sage-400">Formula:</span>
+                            <div className="ml-4 mt-1 text-gray-300 font-mono">
+                              {(utilizationData.data as any)._debug.overallCalculation.formula}
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-dark-border">
+                            <span className="text-sage-400">Calculation:</span>
+                            <div className="ml-4 mt-1 text-gray-300 font-mono">
+                              {(utilizationData.data as any)._debug.overallCalculation.result}
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-dark-border">
+                            <span className="text-sage-400">Final Result:</span>
+                            <span className="ml-2 text-2xl font-bold text-sage-400">
+                              {utilizationData.data.averageUtilization.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Query Info and Last Seen */}
         {(queryInfo || loadingQueryInfo) && (

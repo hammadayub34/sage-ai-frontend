@@ -1,0 +1,68 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Build Docker images
+        run: |
+          docker build -t mqtt-ot-network/influxdb-writer:latest -f Dockerfile.influxdb-writer .
+          docker build -t mqtt-ot-network/mock-plc:latest -f Dockerfile.mock-plc .
+          docker build -t mqtt-ot-network/frontend:latest -f frontend/Dockerfile ./frontend
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Create ECR repositories if they don't exist
+        run: |
+          aws ecr describe-repositories --repository-names mqtt-ot-network/influxdb-writer || \
+            aws ecr create-repository --repository-name mqtt-ot-network/influxdb-writer
+          aws ecr describe-repositories --repository-names mqtt-ot-network/mock-plc || \
+            aws ecr create-repository --repository-name mqtt-ot-network/mock-plc
+          aws ecr describe-repositories --repository-names mqtt-ot-network/frontend || \
+            aws ecr create-repository --repository-name mqtt-ot-network/frontend
+      
+      - name: Push images to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker tag mqtt-ot-network/influxdb-writer:latest $ECR_REGISTRY/mqtt-ot-network/influxdb-writer:latest
+          docker tag mqtt-ot-network/mock-plc:latest $ECR_REGISTRY/mqtt-ot-network/mock-plc:latest
+          docker tag mqtt-ot-network/frontend:latest $ECR_REGISTRY/mqtt-ot-network/frontend:latest
+          
+          docker push $ECR_REGISTRY/mqtt-ot-network/influxdb-writer:latest
+          docker push $ECR_REGISTRY/mqtt-ot-network/mock-plc:latest
+          docker push $ECR_REGISTRY/mqtt-ot-network/frontend:latest
+      
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user/mqtt-ot-network || cd /home/ubuntu/mqtt-ot-network
+            git pull origin main
+            docker-compose -f docker-compose.cloud.yml pull
+            docker-compose -f docker-compose.cloud.yml up -d --build
+            docker-compose -f docker-compose.cloud.yml ps
+            echo "✅ Deployment complete!"
+

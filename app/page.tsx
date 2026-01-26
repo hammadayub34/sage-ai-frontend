@@ -3,14 +3,13 @@
 import { ServiceControlsButton } from '@/components/ServiceControlsButton';
 import { TimeSeriesChart } from '@/components/TimeSeriesChart';
 import { AlarmHistory } from '@/components/AlarmHistory';
-import { AlarmEvents } from '@/components/AlarmEvents';
-import { DowntimeStats } from '@/components/DowntimeStats';
 import { WorkOrderForm } from '@/components/WorkOrderForm';
-import { RefreshIcon, SignalIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, CheckIcon, AIIcon } from '@/components/Icons';
+import { RefreshIcon, SignalIcon, CalendarIcon, ChevronDownIcon, ChevronRightIcon, CheckIcon } from '@/components/Icons';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { VibrationChart } from '@/components/VibrationChart';
+import { CurrentChart } from '@/components/CurrentChart';
 import { ModbusChart } from '@/components/ModbusChart';
 import { toast } from 'react-toastify';
 import { formatAlarmName } from '@/lib/utils';
@@ -88,11 +87,6 @@ export default function Dashboard() {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
-  const [monitoringAnalysis, setMonitoringAnalysis] = useState<string | null>(null);
-  const [loadingMonitoringAnalysis, setLoadingMonitoringAnalysis] = useState(false);
-  const [monitoringAnalysisExpanded, setMonitoringAnalysisExpanded] = useState(true);
-  const [aiRecommendations, setAiRecommendations] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
   
   // Check if selected machine is CNC Machine A (has Modbus data)
   const isCNCMachineA = selectedMachine?.machineName === 'CNC Machine A' || selectedMachine?._id === '6958155ea4f09743147b22ab';
@@ -494,259 +488,6 @@ export default function Dashboard() {
     }
   }, [vibrationDataOverall, isLoadingVibration, isCNCMachineA, chartTab, selectedTimeRange]);
 
-  // Fetch monitoring analysis
-  const fetchMonitoringAnalysis = async () => {
-    // Check if we have either MongoDB data or InfluxDB data
-    const hasMongoData = shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0;
-    const hasInfluxData = downtimeData && (downtimeData.downtimePercentage !== undefined || downtimeData.totalDowntime !== undefined);
-    
-    if (!selectedMachineId || !selectedLabId || (!hasMongoData && !hasInfluxData)) {
-      console.log('[Monitoring Analysis] Missing required data:', {
-        selectedMachineId,
-        hasMongoData,
-        hasInfluxData,
-        selectedLabId
-      });
-      return;
-    }
-    
-    const machine = selectedMachine || machines.find(m => m._id === selectedMachineId);
-    if (!machine) {
-      console.log('[Monitoring Analysis] Machine not found:', selectedMachineId);
-      return;
-    }
-
-    // Get lab name - ensure we have the correct lab
-    const selectedLab = labs.find(lab => lab._id === selectedLabId);
-    if (!selectedLab) {
-      console.log('[Monitoring Analysis] Lab not found:', selectedLabId, 'Available labs:', labs.map(l => ({ id: l._id, name: l.name })));
-      return;
-    }
-
-    const labName = selectedLab.name;
-    const machineName = machine.machineName;
-    
-    // Validate that we have valid names
-    if (!machineName || machineName === 'Unknown Machine') {
-      console.error('[Monitoring Analysis] Invalid machine name:', machineName, 'Machine object:', machine);
-      return;
-    }
-    
-    if (!labName || labName === 'Unknown Lab') {
-      console.error('[Monitoring Analysis] Invalid lab name:', labName, 'Lab object:', selectedLab);
-      return;
-    }
-    
-    // Log for debugging
-    console.log('[Monitoring Analysis] Sending data:', {
-      machineName,
-      machineId: selectedMachineId,
-      labName,
-      selectedLabId,
-      machineObject: machine,
-      labObject: selectedLab
-    });
-
-    setLoadingMonitoringAnalysis(true);
-    setMonitoringAnalysis(null);
-
-    try {
-      const alertsCount = alarmHistoryData ? Object.values(alarmHistoryData).reduce((sum: number, count) => sum + (count as number), 0) : 0;
-      const workOrdersCount = workOrders.length;
-      
-      // Get alarm breakdown
-      const alarmBreakdown = alarmHistoryData ? Object.entries(alarmHistoryData)
-        .filter(([_, count]) => (count as number) > 0)
-        .map(([alarmType, count]) => ({ type: alarmType, count: count as number }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5) // Top 5 alarms
-        : [];
-
-      const formatTimeRange = (range: string): string => {
-        const match = range.match(/-(\d+)([hdms])/);
-        if (!match) return range;
-        const value = parseInt(match[1]);
-        const unit = match[2];
-        if (unit === 'h') {
-          return value === 1 ? 'Last hour' : `Last ${value} hours`;
-        } else if (unit === 'd') {
-          return value === 1 ? 'Last 24 hours' : `Last ${value} days`;
-        }
-        return range;
-      };
-
-      // Check if vibration data is available
-      const hasVibrationData = !isCNCMachineA && chartTab === 'vibration' && vibrationInfo?.hasData;
-      const vibrationDataPoints = vibrationInfo?.dataPoints || 0;
-      const vibrationAxesAvailable = vibrationInfo?.axes || [];
-      const vibrationTimeRange = vibrationInfo?.timeRange || null;
-      
-      // Format time range for display (for vibration chart, it uses different ranges)
-      const formatVibrationTimeRange = (range: string | null): string => {
-        if (!range) return '';
-        // Vibration chart uses: 5m, 30m, 1h, 24h
-        // Main page uses: 24h, 7d, 30d
-        // We'll use the main page range for consistency
-        const rangeMap: Record<string, string> = {
-          '24h': '24 hours',
-          '7d': '7 days',
-          '30d': '30 days',
-          '5m': '5 minutes',
-          '30m': '30 minutes',
-          '1h': '1 hour',
-        };
-        return rangeMap[range] || range;
-      };
-
-      // Calculate performance values from MongoDB data if available, otherwise use InfluxDB data
-      let downtimePercentage: number;
-      let uptimePercentage: number;
-      let totalDowntime: number;
-      let totalUptime: number;
-      let incidentCount: number;
-      let scheduledHours: number | undefined;
-
-      if (shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0) {
-        // Use MongoDB data - EXACT SAME CALCULATION AS PERFORMANCE SECTION
-        const scheduledHoursValue = shiftUtilizationData.totalScheduledHours;
-        const downtimeHours = shiftUtilizationData.totalNonProductiveHours;
-        const productiveHours = shiftUtilizationData.totalProductiveHours;
-        const idleHours = shiftUtilizationData.totalIdleHours;
-        
-        // Calculate percentages (same as DowntimeStats component)
-        const calculatedDowntimePercentage = (downtimeHours / scheduledHoursValue) * 100;
-        const calculatedUptimePercentage = ((idleHours + productiveHours) / scheduledHoursValue) * 100;
-        
-        // Ensure total is exactly 100% (same normalization logic as Performance section)
-        const totalPercentage = calculatedDowntimePercentage + calculatedUptimePercentage;
-        downtimePercentage = calculatedDowntimePercentage;
-        uptimePercentage = totalPercentage > 0 && Math.abs(totalPercentage - 100) > 0.1
-          ? 100 - calculatedDowntimePercentage
-          : calculatedUptimePercentage;
-        
-        // Convert hours to seconds for API consistency
-        totalDowntime = downtimeHours * 3600;
-        totalUptime = (idleHours + productiveHours) * 3600;
-        
-        // Incident count not available from shift utilization, use 0
-        incidentCount = 0;
-        scheduledHours = scheduledHoursValue;
-        
-        console.log('[Monitoring Analysis] Using MongoDB data (matching Performance section):', {
-          scheduledHours: scheduledHoursValue,
-          downtimeHours,
-          productiveHours,
-          idleHours,
-          downtimePercentage: downtimePercentage.toFixed(2),
-          uptimePercentage: uptimePercentage.toFixed(2),
-          calculatedDowntimePercentage: calculatedDowntimePercentage.toFixed(2),
-          calculatedUptimePercentage: calculatedUptimePercentage.toFixed(2),
-          totalPercentage: totalPercentage.toFixed(2),
-        });
-      } else {
-        // Fallback to InfluxDB data
-        downtimePercentage = downtimeData?.downtimePercentage || 0;
-        uptimePercentage = downtimeData?.uptimePercentage || 0;
-        totalDowntime = downtimeData?.totalDowntime || 0;
-        totalUptime = downtimeData?.totalUptime || 0;
-        incidentCount = downtimeData?.incidentCount || 0;
-        scheduledHours = undefined;
-        
-        console.log('[Monitoring Analysis] Using InfluxDB fallback data:', {
-          downtimePercentage: downtimePercentage.toFixed(2),
-          uptimePercentage: uptimePercentage.toFixed(2),
-          incidentCount,
-        });
-      }
-
-      const requestBody = {
-        machineName: machineName,
-        machineId: selectedMachineId,
-        labName: labName,
-        downtimePercentage,
-        uptimePercentage,
-        totalDowntime,
-        totalUptime,
-        incidentCount,
-        timeRange: formatTimeRange(`-${selectedTimeRange}`),
-        alertsCount,
-        alarmBreakdown,
-        workOrdersCount,
-        workOrdersPending: workOrders.filter(wo => wo.status.toLowerCase() === 'pending').length,
-        workOrdersCompleted: workOrders.filter(wo => wo.status.toLowerCase() === 'completed').length,
-        hasVibrationData,
-        vibrationDataPoints,
-        vibrationAxesAvailable,
-        vibrationTimeRange: vibrationTimeRange ? formatVibrationTimeRange(vibrationTimeRange) : null,
-        chartType: isCNCMachineA ? chartTab : (chartTab === 'vibration' ? 'vibration' : 'current'),
-        scheduledHours,
-      };
-
-      const response = await fetch('/api/monitoring/analysis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch analysis');
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let analysisText = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const data = JSON.parse(line);
-              if (data.type === 'chunk') {
-                analysisText += data.content;
-                setMonitoringAnalysis(analysisText);
-              } else if (data.type === 'done') {
-                break;
-              } else if (data.type === 'error') {
-                throw new Error(data.error);
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('Error fetching monitoring analysis:', error);
-      toast.error('Failed to load analysis');
-      setMonitoringAnalysis(null);
-    } finally {
-      setLoadingMonitoringAnalysis(false);
-    }
-  };
-
-  // Clear analysis when lab, machine, or time range changes
-  useEffect(() => {
-    setMonitoringAnalysis(null);
-  }, [selectedLabId, selectedMachineId, selectedTimeRange]);
-
-  // Auto-fetch analysis when machine and data are available
-  useEffect(() => {
-    const hasMongoData = shiftUtilizationData && shiftUtilizationData.totalScheduledHours > 0;
-    const hasInfluxData = downtimeData && (downtimeData.downtimePercentage !== undefined || downtimeData.totalDowntime !== undefined);
-    
-    if (selectedMachineId && selectedLabId && (hasMongoData || hasInfluxData) && !loadingMonitoringAnalysis) {
-      fetchMonitoringAnalysis();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMachineId, selectedLabId, selectedTimeRange, shiftUtilizationData, downtimeData, alarmHistoryData, workOrders, vibrationDataOverall, chartTab]);
-  
   const handleRefresh = () => {
     // Invalidate all queries to force refresh
     queryClient.invalidateQueries();
@@ -951,10 +692,16 @@ export default function Dashboard() {
                   )}
                 </>
               ) : (
-                // Vibration chart for other machines
+                // Vibration and Current charts for other machines
                 <>
                   {chartTab === 'vibration' ? (
                     <VibrationChart 
+                      machineId={selectedMachineId}
+                      timeRange={`-${selectedTimeRange}`}
+                      onTimeRangeChange={setSelectedTimeRange}
+                    />
+                  ) : chartTab === 'current' ? (
+                    <CurrentChart 
                       machineId={selectedMachineId}
                       timeRange={`-${selectedTimeRange}`}
                       onTimeRangeChange={setSelectedTimeRange}
@@ -980,94 +727,6 @@ export default function Dashboard() {
           <div className="text-center text-gray-400">
             <p className="text-lg mb-2">Please select a shopfloor/lab and equipment</p>
             <p className="text-sm">Select a lab from the dropdown above, then choose an equipment</p>
-          </div>
-        </div>
-      )}
-
-      {/* Downtime Statistics */}
-      {selectedMachineId && (
-        <div className="mb-6">
-          <DowntimeStats 
-            machineId={selectedMachineId} 
-            timeRange={`-${selectedTimeRange}`}
-            shiftUtilizationData={isLoadingShiftUtilization ? undefined : (shiftUtilizationData || null)}
-            machineName={selectedMachine?.machineName}
-            labId={selectedLabId}
-          />
-        </div>
-      )}
-
-      {/* AI Analysis Section */}
-      {selectedMachineId && (
-        <div className="mb-6">
-          <div className="bg-dark-panel p-6 rounded-lg border border-dark-border">
-            <div className="flex items-center gap-2 mb-4">
-              <div>
-                <h3 className="heading-inter heading-inter-sm flex items-center gap-2">
-                  <AIIcon className="w-5 h-5 text-sage-400" />
-                  AI Analysis
-                </h3>
-              </div>
-            </div>
-
-            {loadingMonitoringAnalysis ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="flex items-center gap-2 text-sage-400 animate-pulse">
-                  <div className="w-4 h-4 border-2 border-sage-400 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="font-medium">Gathering insights...</span>
-                </div>
-              </div>
-            ) : monitoringAnalysis ? (
-              <div className="pt-4">
-                <div className="prose prose-invert max-w-none">
-                  <div className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                    {monitoringAnalysis.split('\n').map((line, index, array) => {
-                      // Remove markdown formatting
-                      let cleanLine = line.trim();
-                      
-                      // Remove markdown headings (###, ##, #)
-                      cleanLine = cleanLine.replace(/^#{1,6}\s+/, '');
-                      
-                      // Remove bold markers (**text**)
-                      cleanLine = cleanLine.replace(/\*\*/g, '');
-                      
-                      // Check if previous line was empty or a heading
-                      const prevLine = index > 0 ? array[index - 1].trim() : '';
-                      const isFirstHeading = index === 0 || (prevLine === '' && index > 0);
-                      
-                      // Skip empty lines
-                      if (!cleanLine) {
-                        return <br key={index} />;
-                      }
-                      
-                      // Format headings (lines that were markdown headings or bold text)
-                      if (line.trim().match(/^#{1,6}\s+/) || (line.trim().startsWith('**') && line.trim().endsWith('**'))) {
-                        // Reduce top margin for first heading or headings after empty lines
-                        const topMargin = isFirstHeading ? 'mt-2' : 'mt-4';
-                        return (
-                          <h3 key={index} className={`${topMargin} mb-2 text-white font-semibold text-base`}>
-                            {cleanLine}
-                          </h3>
-                        );
-                      }
-                      
-                      // Regular paragraph
-                      return (
-                        <p key={index} className="mb-3 last:mb-0">
-                          {cleanLine}
-                        </p>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-sage-500/10 border border-sage-500/30 rounded text-center">
-                <span className="text-sage-400 text-sm">
-                  No analysis available
-                </span>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1253,13 +912,6 @@ export default function Dashboard() {
       {selectedMachineId && (
         <div className="mb-6">
           <AlarmHistory machineId={selectedMachineId} timeRange="-24h" />
-        </div>
-      )}
-
-      {/* Alarm Events - Real-time from MQTT */}
-      {selectedMachineId && (
-        <div className="mb-6">
-          <AlarmEvents machineId={selectedMachineId} />
         </div>
       )}
 

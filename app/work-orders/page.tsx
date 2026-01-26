@@ -256,10 +256,10 @@ export default function WorkOrdersPage() {
           } else {
             // If date doesn't match, use default time but add small offset for multiple orders
             minute = idx * 15;
-            if (minute >= 60) {
-              hour += Math.floor(minute / 60);
-              minute = minute % 60;
-            }
+      if (minute >= 60) {
+        hour += Math.floor(minute / 60);
+        minute = minute % 60;
+      }
           }
         } catch (error) {
           console.error('Error parsing createdAt date:', error);
@@ -823,7 +823,7 @@ export default function WorkOrdersPage() {
                                         <div className="flex-1 min-w-0">
                                           <div className={`font-bold truncate ${colors.text} text-[11px] leading-tight`}>
                                             {order.workOrderNo}
-                                          </div>
+                                    </div>
                                         </div>
                                         {isCompleted && (
                                           <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-green-400 mt-0.5" />

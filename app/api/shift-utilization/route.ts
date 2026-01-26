@@ -131,16 +131,19 @@ export async function GET(request: NextRequest) {
     const startDateStr = formatDate(startDate);
     const endDateStr = formatDate(endDate);
 
+    // Build MongoDB query
+    const mongoQuery = {
+      shift_name: shiftName,
+      machine_name: { $in: machineNames },
+      date: {
+        $gte: startDateStr,
+        $lte: endDateStr
+      }
+    };
+
     // Fetch shift utilization data for this shift and machines
     const utilizationData = await shiftUtilizationCollection
-      .find({
-        shift_name: shiftName,
-        machine_name: { $in: machineNames },
-        date: {
-          $gte: startDateStr,
-          $lte: endDateStr
-        }
-      })
+      .find(mongoQuery)
       .toArray();
 
     // Aggregate data by machine
@@ -208,6 +211,21 @@ export async function GET(request: NextRequest) {
       ? totalUtilizationWeighted / totalScheduledHours 
       : 0;
 
+    // Prepare calculation steps for debugging
+    const calculationSteps = machineUtilizations.map(machine => ({
+      machineName: machine.machineName,
+      recordCount: machine.recordCount,
+      rawUtilizationSum: machineStats.get(machine.machineName)?.totalUtilization || 0,
+      calculation: `averageUtilization = ${machineStats.get(machine.machineName)?.totalUtilization || 0} / ${machine.recordCount} = ${machine.averageUtilization.toFixed(2)}%`,
+      totals: {
+        productiveHours: machine.totalProductiveHours,
+        idleHours: machine.totalIdleHours,
+        scheduledHours: machine.totalScheduledHours,
+        nonProductiveHours: machine.totalNonProductiveHours,
+        nodeOffHours: machine.totalNodeOffHours,
+      }
+    }));
+
     return NextResponse.json({
       success: true,
       data: {
@@ -226,6 +244,27 @@ export async function GET(request: NextRequest) {
           end: endDateStr,
           days,
         },
+        // Debug information
+        _debug: {
+          queryParameters: {
+            labId,
+            shiftName,
+            machineName: machineName || 'All machines',
+            machineNames,
+            startDate: startDateStr,
+            endDate: endDateStr,
+          },
+          mongoQuery,
+          rawResultsCount: utilizationData.length,
+          rawResults: utilizationData.slice(0, 10), // Limit to first 10 for display
+          calculationSteps,
+          overallCalculation: {
+            totalUtilizationWeighted: totalUtilizationWeighted,
+            totalScheduledHours: totalScheduledHours,
+            formula: `averageUtilization = totalUtilizationWeighted / totalScheduledHours`,
+            result: `averageUtilization = ${totalUtilizationWeighted.toFixed(2)} / ${totalScheduledHours.toFixed(2)} = ${averageUtilization.toFixed(2)}%`
+          }
+        }
       }
     });
   } catch (error: any) {

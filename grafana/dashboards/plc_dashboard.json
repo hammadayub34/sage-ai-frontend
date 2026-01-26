@@ -1,0 +1,160 @@
+{
+  "dashboard": {
+    "title": "PLC Bottle Filler Dashboard",
+    "tags": ["plc", "modbus", "influxdb"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Bottle Count",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "InfluxDB"
+            },
+            "query": "from(bucket: \"plc_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"BottleCount\")\n  |> last()",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Filler Speed",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "InfluxDB"
+            },
+            "query": "from(bucket: \"plc_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"FillerSpeed\")\n  |> last()",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "thresholds"
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Line Running Status",
+        "type": "stat",
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "InfluxDB"
+            },
+            "query": "from(bucket: \"plc_data\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"LineRunning\")\n  |> last()",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "Stopped",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "Running",
+                    "color": "green"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Bottle Count Trend",
+        "type": "timeseries",
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "InfluxDB"
+            },
+            "query": "from(bucket: \"plc_data\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"BottleCount\")\n  |> aggregateWindow(every: 10s, fn: last, createEmpty: false)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Filler Speed Trend",
+        "type": "timeseries",
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "InfluxDB"
+            },
+            "query": "from(bucket: \"plc_data\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"FillerSpeed\")\n  |> aggregateWindow(every: 10s, fn: last, createEmpty: false)",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      }
+    ],
+    "schemaVersion": 38,
+    "version": 0
+  }
+}
+

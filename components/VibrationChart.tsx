@@ -291,7 +291,7 @@ export function VibrationChart({
           <div className="text-xs text-gray-500 mt-1">
             {getDataTypeText()} (Last {getTimeRangeText()} of available data)
             {lastSeenTime && (
-              <span className="ml-2 text-sage-400">• Last seen: {formatLastSeenTime(lastSeenTime)}</span>
+              <span className="ml-2 text-sage-400">• Last Seen: {formatLastSeenTime(lastSeenTime)}</span>
             )}
           </div>
         </div>

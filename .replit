@@ -1,0 +1,12 @@
+language = "python3"
+
+[deploy]
+run = ["python", "main.py"]
+
+[run]
+command = "python main.py"
+
+[packager]
+language = "python3"
+ignoredPackages = ["unit_tests"]
+
